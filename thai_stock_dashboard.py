@@ -29,7 +29,7 @@ from plotly.subplots import make_subplots
 
 TICKERS = ["PTT.BK", "KBANK.BK"]      # ใส่กี่ตัวก็ได้ ได้ไฟล์ละตัว (หุ้นไทยต้องมี .BK ต่อท้าย)
 
-BARS = 120                             # จำนวนแท่งที่แสดงต่อหนึ่งช่อง
+BARS = 150                             # จำนวนแท่งที่แสดงต่อหนึ่งช่อง
 CHART_HEIGHT = 1000                    # ความสูงรวม (px) — iPad Air แนวนอนเลื่อนนิดเดียว
 OUTPUT_DIR = os.path.expanduser("~/StockCharts")
 
