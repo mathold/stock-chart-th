@@ -30,15 +30,18 @@ import thai_stock_dashboard as d
 HERE = os.path.dirname(os.path.abspath(__file__))
 SYMBOLS_CSV = os.path.join(HERE, "symbols.csv")
 CACHE_SECONDS = 900                     # จำข้อมูลไว้ 15 นาที กดดูซ้ำจะเร็ว
-GROUP_ORDER = ["SET50", "SET100", "mai", "US", "Crypto"]   # ลำดับในช่องเลือกกลุ่ม
+GROUP_ORDER = ["SET50", "SET100", "mai", "US",             # ลำดับในช่องเลือกกลุ่ม
+               "Crypto", "Commodity", "Index"]
 
 # ความยาวแท่งของช่อง intraday (นาที) — ไทยวันทำการสั้นกว่า เลยใช้แท่งถี่กว่า
 INTRADAY_MINUTES_TH = 120
 INTRADAY_MINUTES_GLOBAL = 240           # หุ้นเมกา + คริปโต
 
 # กลุ่มไหนอยู่ตลาดไหน — ใช้ตัดสินว่าจะเติม .BK / -USD ให้ชื่อย่อไหม
+# "Raw" = ชื่อในลิสต์เป็นชื่อบน Yahoo อยู่แล้ว (GC=F, ^GSPC) ใช้ตรง ๆ ห้ามเติมอะไร
 GROUP_MARKET = {"SET50": "TH", "SET100": "TH", "mai": "TH",
-                "US": "US", "Crypto": "Crypto"}
+                "US": "US", "Crypto": "Crypto",
+                "Commodity": "Raw", "Index": "Raw"}
 
 # ดัชนี: ชื่อสัญลักษณ์บน Yahoo ไม่แน่นอน ลองไล่ทีละตัวจนกว่าจะเจอข้อมูล
 INDEX_TARGETS = {
@@ -119,28 +122,36 @@ def load_intraday(ticker: str, minutes: int) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=86400)
-def symbol_groups() -> dict[str, list[str]]:
-    """อ่าน symbols.csv → {กลุ่ม: [ชื่อย่อ]}
+def symbol_groups() -> tuple[dict[str, list[str]], dict[str, str]]:
+    """อ่าน symbols.csv → ({กลุ่ม: [ชื่อย่อ]}, {ชื่อย่อ: ชื่อไทย})
 
+    เรียงตามลำดับในไฟล์ (ดัชนี/สินค้าโภคภัณฑ์เรียงตัวสำคัญขึ้นก่อน)
     ไฟล์รุ่นเก่าที่มีแต่คอลัมน์ symbol ก็ยังอ่านได้ (นับเป็นกลุ่ม SET100 ทั้งหมด)
     """
     if not os.path.exists(SYMBOLS_CSV):
-        return {}
+        return {}, {}
     with open(SYMBOLS_CSV, encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
     if not rows:
-        return {}
+        return {}, {}
 
     key = "symbol" if "symbol" in rows[0] else list(rows[0])[0]
-    groups: dict[str, set[str]] = {}
+    groups: dict[str, list[str]] = {}
+    labels: dict[str, str] = {}
     for r in rows:
         sym = (r.get(key) or "").strip().upper()
-        if sym:
-            groups.setdefault((r.get("group") or "SET100").strip(), set()).add(sym)
+        if not sym:
+            continue
+        g = groups.setdefault((r.get("group") or "SET100").strip(), [])
+        if sym not in g:
+            g.append(sym)
+        name = (r.get("name") or "").strip()
+        if name:
+            labels[sym] = f"{sym} — {name}"
 
     order = [g for g in GROUP_ORDER if g in groups] + \
             [g for g in groups if g not in GROUP_ORDER]
-    return {g: sorted(groups[g]) for g in order}
+    return {g: groups[g] for g in order}, labels
 
 
 def candidates_for(symbol: str, market: str | None = None) -> list[str]:
@@ -153,6 +164,9 @@ def candidates_for(symbol: str, market: str | None = None) -> list[str]:
     s = symbol.upper()
     if s in INDEX_TARGETS:
         return INDEX_TARGETS[s]
+    # ^GSPC / GC=F / 000001.SS — ชื่อเต็มบน Yahoo อยู่แล้ว เติมอะไรไม่ได้
+    if market == "Raw" or s.startswith("^") or "=" in s or "." in s:
+        return [s]
     if market == "TH":
         return [f"{s}.BK"]
     if market == "US":
@@ -197,14 +211,14 @@ c1, c2, c3, c4, c5, c6 = st.columns([3.4, 1.5, 3.3, 1, 1.2, 1.1])
 typed = c1.text_input("ชื่อหุ้น", key="typed", label_visibility="collapsed",
                       placeholder="พิมพ์ชื่อย่อ เช่น PTT · AAPL · BTC แล้วกด Enter")
 
-groups = symbol_groups()
+groups, labels = symbol_groups()
 group = c2.selectbox("กลุ่ม", list(groups) or ["—"], key="group",
                      label_visibility="collapsed", disabled=not groups)
 names = groups.get(group, [])
 placeholder = f"— เลือกจาก {group} —" if names else "— ไม่มีรายชื่อ —"
 choice = c3.selectbox("หุ้นในกลุ่ม", [placeholder] + names, key="choice",
-                      label_visibility="collapsed",
-                      disabled=not names)
+                      label_visibility="collapsed", disabled=not names,
+                      format_func=lambda s: labels.get(s, s))
 
 # ตัวไหนถูกแก้ล่าสุด ตัวนั้นชนะ
 if typed != st.session_state.get("_prev_typed"):

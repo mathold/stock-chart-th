@@ -5,7 +5,8 @@
     python fetch_symbols.py                          # ลองดึงจาก SET อัตโนมัติทุกกลุ่ม
     python fetch_symbols.py รายชื่อ.xlsx --group mai  # แปลงจากไฟล์ที่โหลดมาเอง (กลุ่มเดียว)
 
-กลุ่มที่รองรับ: SET50 · SET100 · mai · US (หุ้นเมกา) · Crypto   (ดู GROUPS ด้านล่าง)
+กลุ่มที่รองรับ: SET50 · SET100 · mai · US (หุ้นเมกา) · Crypto ·
+              Commodity (ทอง/น้ำมัน/สินค้าเกษตร) · Index (ดัชนีหุ้นทั่วโลก)
 
 ลำดับการทำงาน
   1. ลองเรียก API ของ SET ทีละกลุ่ม
@@ -46,10 +47,12 @@ GROUPS = {
         "https://www.set.or.th/api/set/index/mai/composition?language=en",
         "https://www.set.or.th/api/set/index/MAI/composition",
     ],
-    # 2 กลุ่มนี้ไม่มี API ให้ดึง ใช้รายชื่อในสคริปต์อย่างเดียว
-    # (ชื่อที่เก็บคือชื่อบน Yahoo ตรง ๆ เช่น AAPL, BTC-USD)
+    # 4 กลุ่มนี้ไม่มี API ให้ดึง ใช้รายชื่อในสคริปต์อย่างเดียว
+    # (ชื่อที่เก็บคือชื่อบน Yahoo ตรง ๆ เช่น AAPL, BTC-USD, GC=F, ^GSPC)
     "US": [],
     "Crypto": [],
+    "Commodity": [],
+    "Index": [],
 }
 
 HEADERS = {
@@ -97,6 +100,37 @@ SPY QQQ
 BTC-USD ETH-USD SOL-USD BNB-USD XRP-USD ADA-USD DOGE-USD AVAX-USD LINK-USD
 DOT-USD LTC-USD TRX-USD SHIB-USD ATOM-USD NEAR-USD
 """.split(),
+
+    # สินค้าโภคภัณฑ์ — ราคาฟิวเจอร์ส Yahoo ใช้ลงท้าย =F (ตรวจแล้ว 16/08/2026)
+    "Commodity": """
+GC=F SI=F PL=F PA=F HG=F CL=F BZ=F NG=F RB=F HO=F
+ZC=F ZS=F ZW=F KC=F SB=F CT=F CC=F LE=F
+""".split(),
+
+    # ดัชนีหุ้น — Yahoo ใช้ขึ้นต้น ^ (ตรวจแล้ว 16/08/2026)
+    # ไม่ใส่ ^SET50.BK เพราะ Yahoo ไม่มีข้อมูล (ปุ่ม SET50 ในแอปมีทางสำรองอยู่แล้ว)
+    "Index": """
+^SET.BK ^GSPC ^DJI ^IXIC ^NDX ^RUT ^VIX ^N225 ^HSI ^KS11 ^TWII ^STI
+000001.SS ^JKSE ^KLSE ^BSESN ^NSEI ^AXJO ^FTSE ^GDAXI ^FCHI ^STOXX50E
+""".split(),
+}
+
+# ชื่อไทยกำกับ — โชว์ในดรอปดาวน์ให้รู้ว่าตัวย่อคืออะไร (ว่าง = ใช้ตัวย่อตรง ๆ)
+NAMES = {
+    "GC=F": "ทองคำ", "SI=F": "เงิน", "PL=F": "แพลทินัม", "PA=F": "แพลเลเดียม",
+    "HG=F": "ทองแดง", "CL=F": "น้ำมันดิบ WTI", "BZ=F": "น้ำมันดิบ Brent",
+    "NG=F": "ก๊าซธรรมชาติ", "RB=F": "น้ำมันเบนซิน", "HO=F": "น้ำมันดีเซล",
+    "ZC=F": "ข้าวโพด", "ZS=F": "ถั่วเหลือง", "ZW=F": "ข้าวสาลี", "KC=F": "กาแฟ",
+    "SB=F": "น้ำตาล", "CT=F": "ฝ้าย", "CC=F": "โกโก้", "LE=F": "โคมีชีวิต",
+
+    "^SET.BK": "SET ไทย", "^GSPC": "S&P 500", "^DJI": "ดาวโจนส์",
+    "^IXIC": "แนสแด็ก", "^NDX": "แนสแด็ก 100", "^RUT": "รัสเซล 2000",
+    "^VIX": "ดัชนีความผันผวน", "^N225": "นิกเกอิ ญี่ปุ่น", "^HSI": "ฮั่งเส็ง ฮ่องกง",
+    "^KS11": "คอสปี้ เกาหลี", "^TWII": "ไต้หวัน", "^STI": "สิงคโปร์",
+    "000001.SS": "เซี่ยงไฮ้", "^JKSE": "อินโดนีเซีย", "^KLSE": "มาเลเซีย",
+    "^BSESN": "เซนเซ็กซ์ อินเดีย", "^NSEI": "นิฟตี้ อินเดีย", "^AXJO": "ออสเตรเลีย",
+    "^FTSE": "ฟุตซี่ อังกฤษ", "^GDAXI": "แดกซ์ เยอรมนี", "^FCHI": "ฝรั่งเศส",
+    "^STOXX50E": "ยูโรสต็อกซ์ 50",
 }
 
 
@@ -151,6 +185,8 @@ def read_existing() -> dict[str, list[str]]:
             sym = (row.get("symbol") or "").strip().upper()
             if sym:
                 out.setdefault((row.get("group") or "SET100").strip(), []).append(sym)
+                if (row.get("name") or "").strip():
+                    NAMES.setdefault(sym, row["name"].strip())
     return out
 
 
@@ -158,10 +194,13 @@ def save(by_group: dict[str, list[str]], sources: dict[str, str]) -> None:
     order = list(GROUPS) + [g for g in by_group if g not in GROUPS]
     with open(OUTPUT, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
-        w.writerow(["symbol", "group"])
+        w.writerow(["symbol", "group", "name"])
         for g in order:
-            for s in sorted(set(by_group.get(g, []))):
-                w.writerow([s, g])
+            # ดัชนี/สินค้าโภคภัณฑ์เรียงตามลำดับที่เขียนไว้ (ตัวสำคัญขึ้นก่อน)
+            syms = by_group.get(g, [])
+            syms = syms if g in ("Commodity", "Index") else sorted(set(syms))
+            for s in dict.fromkeys(syms):
+                w.writerow([s, g, NAMES.get(s, "")])
 
     print(f"\nเซฟแล้ว: {OUTPUT}")
     for g in order:
@@ -189,7 +228,7 @@ def main():
     by_group: dict[str, list[str]] = {}
     sources: dict[str, str] = {}
     for group, urls in GROUPS.items():
-        if not urls:                       # US / Crypto — ไม่มี API ให้ดึง
+        if not urls:                       # US / Crypto / Commodity / Index — ไม่มี API
             by_group[group] = list(FALLBACK[group])
             sources[group] = "รายชื่อในสคริปต์"
             continue
