@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -59,6 +60,15 @@ BG_COLOR = "#FFFFFF"
 GRID_COLOR = "#ECECEC"
 
 TIMEFRAMES = ["120m", "Day", "Week", "Month"]   # ลำดับ: ซ้ายบน, ขวาบน, ซ้ายล่าง, ขวาล่าง
+
+BANGKOK = ZoneInfo("Asia/Bangkok")
+
+
+def now_bkk() -> datetime:
+    """เวลาไทยเสมอ — เซิร์ฟเวอร์ Streamlit Cloud เป็น UTC ถ้าใช้ datetime.now()
+    เฉย ๆ เวลาบนหัวกราฟจะช้าไป 7 ชั่วโมง
+    """
+    return datetime.now(BANGKOK)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -296,7 +306,7 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
         fig.update_yaxes(range=[0, 100], dtick=25, row=base_row + 2, col=col)
 
     fig.update_layout(
-        title=dict(text=f"{ticker}  ·  {datetime.now():%d/%m/%Y %H:%M}",
+        title=dict(text=f"{ticker}  ·  {now_bkk():%d/%m/%Y %H:%M}",
                    x=0.01, font=dict(size=16, color="#111")),
         height=height, autosize=True,
         paper_bgcolor=BG_COLOR, plot_bgcolor=BG_COLOR,

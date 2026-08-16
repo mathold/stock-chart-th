@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import csv
 import os
-from datetime import datetime
 
 import pandas as pd
 import streamlit as st
@@ -221,7 +220,7 @@ st.plotly_chart(fig, **FULL_CHART, config={
 })
 
 # รวมเป็นบรรทัดเดียว — ทุก px ที่ประหยัดได้ตรงนี้คือความสูงที่กราฟได้เพิ่ม
-note = f"สัญลักษณ์: `{used}` · ณ {datetime.now():%d/%m/%Y %H:%M}"
+note = f"สัญลักษณ์: `{used}` · ณ {d.now_bkk():%d/%m/%Y %H:%M} น. (เวลาไทย)"
 if not has_intraday:
     note += " · ไม่มี intraday ช่อง 120 นาทีจึงว่าง"
 note += (" · ราคาจาก Yahoo Finance เป็นข้อมูลปิดตลาด/ดีเลย์ ไม่ใช่เรียลไทม์ "
