@@ -29,8 +29,9 @@ from plotly.subplots import make_subplots
 
 TICKERS = ["PTT.BK", "KBANK.BK"]      # ใส่กี่ตัวก็ได้ ได้ไฟล์ละตัว (หุ้นไทยต้องมี .BK ต่อท้าย)
 
-BARS = 250                             # จำนวนแท่งที่แสดงต่อหนึ่งช่อง
-CHART_HEIGHT = 1000                    # ความสูงรวม (px) — iPad Air แนวนอนเลื่อนนิดเดียว
+BARS = 200                             # จำนวนแท่งที่แสดงต่อหนึ่งช่อง
+CHART_HEIGHT = 1000                    # ความสูงรวม (px) ของไฟล์ HTML
+                                       # ฝั่งเว็บ Streamlit ส่ง height=None แล้วคุมด้วย CSS ให้เต็มจอแทน
 OUTPUT_DIR = os.path.expanduser("~/StockCharts")
 
 EMA_STYLE = {                          # คาบ : (สี, ความหนาเส้น)
@@ -262,7 +263,9 @@ def draw_panel(fig, df: pd.DataFrame, tf: str, base_row: int, col: int, show_leg
     value_tag(fig, last["RSI"], RSI_COLOR, base_row + 2, col, digits=1)
 
 
-def build_figure(ticker: str, panels: dict[str, pd.DataFrame]) -> go.Figure:
+def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
+                 height: int | None = CHART_HEIGHT) -> go.Figure:
+    """height=None = ไม่ล็อกความสูง ปล่อยให้ยืดตามกล่องที่ครอบอยู่ (ใช้กับเว็บ)"""
     fig = make_subplots(
         rows=6, cols=2,
         row_heights=[0.21, 0.06, 0.07, 0.21, 0.06, 0.07],
@@ -295,7 +298,7 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame]) -> go.Figure:
     fig.update_layout(
         title=dict(text=f"{ticker}  ·  {datetime.now():%d/%m/%Y %H:%M}",
                    x=0.01, font=dict(size=16, color="#111")),
-        height=CHART_HEIGHT, autosize=True,
+        height=height, autosize=True,
         paper_bgcolor=BG_COLOR, plot_bgcolor=BG_COLOR,
         font=dict(family="Arial, sans-serif", size=11, color="#333"),
         margin=dict(l=10, r=58, t=74, b=8),

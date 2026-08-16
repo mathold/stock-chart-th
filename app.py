@@ -42,6 +42,23 @@ INDEX_TARGETS = {
 st.set_page_config(page_title="กราฟหุ้นไทย", page_icon="📈",
                    layout="wide", initial_sidebar_state="collapsed")
 
+# ความสูงกราฟ (px) — ตั้งให้ครบ 4 ช่องพอดีจอเดียวบน iPad Air 11" แนวนอน
+# จอ 2360x1640 px @2x = viewport 1180x820 pt · หักแถวควบคุมบน + คำอธิบายล่าง ~70 px
+# (Plotly ต้องได้ตัวเลขชัด ๆ ถ้าปล่อย autosize มันจะตกกลับไปใช้ default 450 px)
+CHART_HEIGHT_PX = 750
+
+st.markdown(f"""
+<style>
+  header[data-testid="stHeader"], [data-testid="stToolbar"], footer {{ display: none !important; }}
+  .block-container {{ padding: .35rem .6rem .1rem !important; max-width: 100% !important; }}
+  [data-testid="stVerticalBlock"] {{ gap: .3rem !important; }}
+  [data-testid="stCaptionContainer"] p {{ font-size: .68rem; line-height: 1.2; margin: 0; }}
+  [data-testid="stPlotlyChart"], [data-testid="stPlotlyChart"] > div {{
+      height: {CHART_HEIGHT_PX}px !important;
+  }}
+</style>
+""", unsafe_allow_html=True)
+
 
 def _full(fn) -> dict:
     """Streamlit เปลี่ยนจาก use_container_width เป็น width='stretch' — รองรับทั้งสองรุ่น"""
@@ -126,7 +143,8 @@ def build(symbol: str):
         "Week": d.to_period(daily, "W-FRI"),
         "Month": d.to_period(daily, "ME"),
     }
-    return d.build_figure(symbol.upper(), panels), cand, not intraday.empty
+    return (d.build_figure(symbol.upper(), panels, height=CHART_HEIGHT_PX),
+            cand, not intraday.empty)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -184,9 +202,10 @@ st.plotly_chart(fig, **FULL_CHART, config={
     "scrollZoom": True, "displaylogo": False, "responsive": True,
 })
 
-note = f"สัญลักษณ์ที่ใช้: `{used}` · ข้อมูล ณ {datetime.now():%d/%m/%Y %H:%M}"
+# รวมเป็นบรรทัดเดียว — ทุก px ที่ประหยัดได้ตรงนี้คือความสูงที่กราฟได้เพิ่ม
+note = f"สัญลักษณ์: `{used}` · ณ {datetime.now():%d/%m/%Y %H:%M}"
 if not has_intraday:
-    note += " · ไม่มีข้อมูล intraday ช่อง 120 นาทีจึงว่าง"
+    note += " · ไม่มี intraday ช่อง 120 นาทีจึงว่าง"
+note += (" · ราคาจาก Yahoo Finance เป็นข้อมูลปิดตลาด/ดีเลย์ ไม่ใช่เรียลไทม์ "
+         "ใช้ประกอบการศึกษา ตรวจกับโบรกเกอร์ก่อนซื้อขาย")
 st.caption(note)
-st.caption("ราคาจาก Yahoo Finance เป็นข้อมูลปิดตลาด/ดีเลย์ ไม่ใช่ราคาเรียลไทม์ "
-           "ใช้ประกอบการศึกษา ตรวจสอบกับโบรกเกอร์ก่อนตัดสินใจซื้อขาย")
