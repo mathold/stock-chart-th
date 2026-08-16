@@ -32,6 +32,10 @@ SYMBOLS_CSV = os.path.join(HERE, "symbols.csv")
 CACHE_SECONDS = 900                     # จำข้อมูลไว้ 15 นาที กดดูซ้ำจะเร็ว
 GROUP_ORDER = ["SET50", "SET100", "mai", "US", "Crypto"]   # ลำดับในช่องเลือกกลุ่ม
 
+# ความยาวแท่งของช่อง intraday (นาที) — ไทยวันทำการสั้นกว่า เลยใช้แท่งถี่กว่า
+INTRADAY_MINUTES_TH = 120
+INTRADAY_MINUTES_GLOBAL = 240           # หุ้นเมกา + คริปโต
+
 # กลุ่มไหนอยู่ตลาดไหน — ใช้ตัดสินว่าจะเติม .BK / -USD ให้ชื่อย่อไหม
 GROUP_MARKET = {"SET50": "TH", "SET100": "TH", "mai": "TH",
                 "US": "US", "Crypto": "Crypto"}
@@ -87,11 +91,11 @@ def _cached_daily(ticker: str) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=CACHE_SECONDS, show_spinner=False)
-def _cached_intraday(ticker: str) -> pd.DataFrame:
-    return d.fetch_intraday(ticker)
+def _cached_intraday(ticker: str, minutes: int) -> pd.DataFrame:
+    return d.fetch_intraday(ticker, minutes)
 
 
-def _guard(fn, ticker: str) -> pd.DataFrame:
+def _guard(fn, ticker: str, *extra) -> pd.DataFrame:
     """ดึงข้อมูลแบบไม่ให้ error ทำเว็บพัง
 
     ปล่อยให้ exception หลุดออกมาจากฟังก์ชันที่มี cache ก่อน — Streamlit จะ
@@ -99,7 +103,7 @@ def _guard(fn, ticker: str) -> pd.DataFrame:
     กดใหม่แล้วดึงซ้ำได้เลย (เดิมดักเป็น DataFrame ว่างแล้วโดน cache ค้าง 15 นาที)
     """
     try:
-        return fn(ticker)
+        return fn(ticker, *extra)
     except Exception as e:                              # noqa: BLE001
         st.session_state.setdefault("fetch_errors", []).append(
             f"{ticker}: {type(e).__name__} — {e}")
@@ -110,8 +114,8 @@ def load_daily(ticker: str) -> pd.DataFrame:
     return _guard(_cached_daily, ticker)
 
 
-def load_intraday(ticker: str) -> pd.DataFrame:
-    return _guard(_cached_intraday, ticker)
+def load_intraday(ticker: str, minutes: int) -> pd.DataFrame:
+    return _guard(_cached_intraday, ticker, minutes)
 
 
 @st.cache_data(ttl=86400)
@@ -167,9 +171,12 @@ def build(symbol: str, market: str | None = None):
     else:
         return None
 
-    intraday = load_intraday(cand)
+    # หุ้นไทยใช้แท่ง 120 นาที (วันทำการสั้น) · เมกา/คริปโตใช้ 240 นาที
+    # ดูจากชื่อที่ดึงได้จริง ไม่ใช่จากกลุ่ม เพราะพิมพ์เองก็ต้องได้ถูกเหมือนกัน
+    minutes = INTRADAY_MINUTES_TH if cand.upper().endswith(".BK") else INTRADAY_MINUTES_GLOBAL
+    intraday = load_intraday(cand, minutes)
     panels = {
-        "120m": intraday,
+        f"{minutes}m": intraday,
         "Day": daily,
         "Week": d.to_period(daily, "W-FRI"),
         "Month": d.to_period(daily, "ME"),
@@ -245,7 +252,7 @@ st.plotly_chart(fig, **FULL_CHART, config={
 # รวมเป็นบรรทัดเดียว — ทุก px ที่ประหยัดได้ตรงนี้คือความสูงที่กราฟได้เพิ่ม
 note = f"สัญลักษณ์: `{used}` · ณ {d.now_bkk():%d/%m/%Y %H:%M} น. (เวลาไทย)"
 if not has_intraday:
-    note += " · ไม่มี intraday ช่อง 120 นาทีจึงว่าง"
+    note += " · ไม่มี intraday ช่องแรกจึงว่าง"
 note += (" · ราคาจาก Yahoo Finance เป็นข้อมูลปิดตลาด/ดีเลย์ ไม่ใช่เรียลไทม์ "
          "ใช้ประกอบการศึกษา ตรวจกับโบรกเกอร์ก่อนซื้อขาย")
 st.caption(note)

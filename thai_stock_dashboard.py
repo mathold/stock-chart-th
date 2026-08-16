@@ -85,8 +85,8 @@ def _flatten(df: pd.DataFrame) -> pd.DataFrame:
     return df[["Open", "High", "Low", "Close", "Volume"]].dropna(subset=["Close"])
 
 
-def fetch_intraday(ticker: str) -> pd.DataFrame:
-    """ดึงรายชั่วโมงแล้วรวมเป็นแท่ง 120 นาที
+def fetch_intraday(ticker: str, minutes: int = 120) -> pd.DataFrame:
+    """ดึงรายชั่วโมงแล้วรวมเป็นแท่งตามที่สั่ง (ไทย 120 นาที · เมกา/คริปโต 240 นาที)
 
     หมายเหตุตลาดไทย: พักเที่ยง 12:30-14:30 ทำให้แท่ง 120 นาทีบางแท่ง
     กินเวลาไม่เต็ม (เช่น 12:00-12:30) — เป็นเรื่องปกติของการรวมแท่ง
@@ -102,7 +102,7 @@ def fetch_intraday(ticker: str) -> pd.DataFrame:
     if df.index.tz is not None:
         df.index = df.index.tz_convert("Asia/Bangkok")
 
-    return df.resample("120min", origin="start_day").agg({
+    return df.resample(f"{minutes}min", origin="start_day").agg({
         "Open": "first", "High": "max", "Low": "min",
         "Close": "last", "Volume": "sum",
     }).dropna(subset=["Close"])
@@ -161,8 +161,9 @@ def fmt(v, digits: int = 2) -> str:
 
 def label_axis(index: pd.DatetimeIndex, tf: str) -> list[str]:
     """ใช้ป้ายข้อความเป็นแกน X เพื่อไม่ให้เกิดช่องว่างวันหยุด/พักเที่ยง"""
-    fmt = {"120m": "%d/%m %H:%M", "Day": "%d/%m/%y",
-           "Week": "%d/%m/%y", "Month": "%m/%Y"}[tf]
+    # ช่อง intraday ชื่อไม่ตายตัว (120m / 240m) เลยดูที่ตัวท้ายว่าเป็น m ไหม
+    fmt = ("%d/%m %H:%M" if tf.endswith("m")
+           else {"Day": "%d/%m/%y", "Week": "%d/%m/%y", "Month": "%m/%Y"}[tf])
     return [t.strftime(fmt) for t in index]
 
 
@@ -282,8 +283,10 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
         vertical_spacing=0.028, horizontal_spacing=0.075,
     )
 
-    for i, tf in enumerate(TIMEFRAMES):
-        df = panels.get(tf)
+    # ไล่ตามลำดับคีย์ใน panels (ช่องแรกชื่อ 120m หรือ 240m แล้วแต่ตลาด)
+    for i, (tf, df) in enumerate(panels.items()):
+        if i >= len(PANEL_POS):
+            break
         if df is None or df.empty:
             continue
         base_row, col = PANEL_POS[i]
