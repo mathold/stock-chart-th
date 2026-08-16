@@ -30,7 +30,11 @@ import thai_stock_dashboard as d
 HERE = os.path.dirname(os.path.abspath(__file__))
 SYMBOLS_CSV = os.path.join(HERE, "symbols.csv")
 CACHE_SECONDS = 900                     # จำข้อมูลไว้ 15 นาที กดดูซ้ำจะเร็ว
-GROUP_ORDER = ["SET50", "SET100", "mai"]   # ลำดับที่อยากให้โชว์ในช่องเลือกกลุ่ม
+GROUP_ORDER = ["SET50", "SET100", "mai", "US", "Crypto"]   # ลำดับในช่องเลือกกลุ่ม
+
+# กลุ่มไหนอยู่ตลาดไหน — ใช้ตัดสินว่าจะเติม .BK / -USD ให้ชื่อย่อไหม
+GROUP_MARKET = {"SET50": "TH", "SET100": "TH", "mai": "TH",
+                "US": "US", "Crypto": "Crypto"}
 
 # ดัชนี: ชื่อสัญลักษณ์บน Yahoo ไม่แน่นอน ลองไล่ทีละตัวจนกว่าจะเจอข้อมูล
 INDEX_TARGETS = {
@@ -135,13 +139,28 @@ def symbol_groups() -> dict[str, list[str]]:
     return {g: sorted(groups[g]) for g in order}
 
 
-def candidates_for(symbol: str) -> list[str]:
-    return INDEX_TARGETS.get(symbol.upper(), [f"{symbol.upper()}.BK"])
+def candidates_for(symbol: str, market: str | None = None) -> list[str]:
+    """ชื่อบน Yahoo ที่จะลองไล่ดึง — คนละตลาดเติมท้ายคนละแบบ
+
+    เลือกจากรายชื่อในกลุ่ม → รู้ตลาดแน่นอน ใช้แบบเดียวจบ
+    พิมพ์เอง (market=None) → ไล่ไทยก่อน แล้วค่อยเมกา แล้วค่อยคริปโต
+    (ไทยมาก่อนเพราะชื่อย่อชนกันได้ เช่น M = MK เมืองไทย และ Macy's ที่อเมริกา)
+    """
+    s = symbol.upper()
+    if s in INDEX_TARGETS:
+        return INDEX_TARGETS[s]
+    if market == "TH":
+        return [f"{s}.BK"]
+    if market == "US":
+        return [s]
+    if market == "Crypto":
+        return [s if "-" in s else f"{s}-USD"]
+    return [f"{s}.BK", s, f"{s}-USD"]
 
 
-def build(symbol: str):
+def build(symbol: str, market: str | None = None):
     """คืน (figure, สัญลักษณ์ที่ใช้ได้, มี intraday ไหม) หรือ None ถ้าไม่มีข้อมูล"""
-    for cand in candidates_for(symbol):
+    for cand in candidates_for(symbol, market):
         daily = load_daily(cand)
         if not daily.empty and len(daily) >= 5:
             break
@@ -164,11 +183,12 @@ def build(symbol: str):
 # ─────────────────────────────────────────────────────────────
 
 st.session_state.setdefault("symbol", "SET")
+st.session_state.setdefault("market", None)      # None = ให้ระบบเดาตลาดเอง
 
 c1, c2, c3, c4, c5, c6 = st.columns([3.4, 1.5, 3.3, 1, 1.2, 1.1])
 
 typed = c1.text_input("ชื่อหุ้น", key="typed", label_visibility="collapsed",
-                      placeholder="พิมพ์ชื่อหุ้น เช่น PTT แล้วกด Enter")
+                      placeholder="พิมพ์ชื่อย่อ เช่น PTT · AAPL · BTC แล้วกด Enter")
 
 groups = symbol_groups()
 group = c2.selectbox("กลุ่ม", list(groups) or ["—"], key="group",
@@ -184,16 +204,18 @@ if typed != st.session_state.get("_prev_typed"):
     st.session_state._prev_typed = typed
     if typed.strip():
         st.session_state.symbol = typed.strip().upper()
+        st.session_state.market = None          # พิมพ์เอง = ไม่รู้ตลาด ให้ไล่หา
 
 if choice != st.session_state.get("_prev_choice"):
     st.session_state._prev_choice = choice
     if choice not in (placeholder, "— ไม่มีรายชื่อ —"):
         st.session_state.symbol = choice
+        st.session_state.market = GROUP_MARKET.get(group)
 
 if c4.button("SET", **FULL_BTN):
-    st.session_state.symbol = "SET"
+    st.session_state.symbol, st.session_state.market = "SET", None
 if c5.button("SET50", **FULL_BTN):
-    st.session_state.symbol = "SET50"
+    st.session_state.symbol, st.session_state.market = "SET50", None
 if c6.button("รีเฟรช", **FULL_BTN, help="ดึงราคาใหม่ ไม่ใช้ข้อมูลที่จำไว้"):
     st.cache_data.clear()
 
@@ -201,7 +223,7 @@ symbol = st.session_state.symbol
 
 st.session_state.fetch_errors = []
 with st.spinner(f"กำลังดึงข้อมูล {symbol} ..."):
-    result = build(symbol)
+    result = build(symbol, st.session_state.market)
 
 if result is None:
     st.error(f"ไม่พบข้อมูลของ **{symbol}**")
@@ -209,7 +231,8 @@ if result is None:
         st.warning("ดึงข้อมูลไม่สำเร็จ (คนละเรื่องกับ 'ไม่มีหุ้นตัวนี้') — "
                    "อาจเน็ตหลุดหรือติด rate limit ของ Yahoo กด **รีเฟรช** ลองใหม่อีกครั้ง")
         st.caption(" · ".join(st.session_state.fetch_errors))
-    st.caption("ตรวจตัวสะกดอีกที หุ้นไทยใส่แค่ชื่อย่อ เช่น PTT ไม่ต้องเติม .BK · "
+    st.caption("ตรวจตัวสะกดอีกที · หุ้นไทยใส่แค่ชื่อย่อ เช่น PTT (ไม่ต้องเติม .BK) · "
+               "หุ้นเมกาใส่ชื่อย่อตรง ๆ เช่น AAPL · คริปโตใส่ชื่อเหรียญ เช่น BTC หรือ BTC-USD · "
                "หุ้นที่เพิ่งเข้าตลาดหรือสภาพคล่องต่ำ Yahoo อาจยังไม่มีข้อมูล")
     st.stop()
 

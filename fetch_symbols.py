@@ -5,7 +5,7 @@
     python fetch_symbols.py                          # ลองดึงจาก SET อัตโนมัติทุกกลุ่ม
     python fetch_symbols.py รายชื่อ.xlsx --group mai  # แปลงจากไฟล์ที่โหลดมาเอง (กลุ่มเดียว)
 
-กลุ่มที่รองรับ: SET50 · SET100 · mai   (ดู GROUPS ด้านล่าง)
+กลุ่มที่รองรับ: SET50 · SET100 · mai · US (หุ้นเมกา) · Crypto   (ดู GROUPS ด้านล่าง)
 
 ลำดับการทำงาน
   1. ลองเรียก API ของ SET ทีละกลุ่ม
@@ -46,6 +46,10 @@ GROUPS = {
         "https://www.set.or.th/api/set/index/mai/composition?language=en",
         "https://www.set.or.th/api/set/index/MAI/composition",
     ],
+    # 2 กลุ่มนี้ไม่มี API ให้ดึง ใช้รายชื่อในสคริปต์อย่างเดียว
+    # (ชื่อที่เก็บคือชื่อบน Yahoo ตรง ๆ เช่น AAPL, BTC-USD)
+    "US": [],
+    "Crypto": [],
 }
 
 HEADERS = {
@@ -79,6 +83,19 @@ TIDLOR TIPH TISCO TLI TOA TOP TQM TRUE TTB TTW TU TVO VGI WHA WHAUP
 APP ARIN AU D DOD EASON ECF ETC GTV ICN INSET JUBILE KUMWEL KWM MOONG MVP NCL
 NETBAY PIS PPS PROEN PROS READY RT SAV SIMAT SORKON STC TIGER TM TPS UEC UREKA
 XPG YGG ZIGA
+""".split(),
+
+    # หุ้นเมกา — ชื่อบน Yahoo ใช้ชื่อย่อตรง ๆ ไม่ต้องเติมอะไร (ตรวจแล้ว 16/08/2026)
+    "US": """
+AAPL MSFT NVDA GOOGL AMZN META TSLA AVGO AMD NFLX ADBE CRM ORCL INTC QCOM CSCO
+PLTR UBER COIN MSTR JPM V MA BAC WMT COST XOM JNJ PG DIS KO PEP LLY UNH BA
+SPY QQQ
+""".split(),
+
+    # คริปโต — Yahoo ใช้รูปแบบ <เหรียญ>-USD (ตรวจแล้ว 16/08/2026)
+    "Crypto": """
+BTC-USD ETH-USD SOL-USD BNB-USD XRP-USD ADA-USD DOGE-USD AVAX-USD LINK-USD
+DOT-USD LTC-USD TRX-USD SHIB-USD ATOM-USD NEAR-USD
 """.split(),
 }
 
@@ -172,6 +189,11 @@ def main():
     by_group: dict[str, list[str]] = {}
     sources: dict[str, str] = {}
     for group, urls in GROUPS.items():
+        if not urls:                       # US / Crypto — ไม่มี API ให้ดึง
+            by_group[group] = list(FALLBACK[group])
+            sources[group] = "รายชื่อในสคริปต์"
+            continue
+
         print(f"ลองดึงรายชื่อ {group} จาก SET ...")
         syms = from_set_api(urls)
         if syms:
