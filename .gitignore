@@ -1,0 +1,16 @@
+# virtualenv
+.venv/
+venv/
+
+# python
+__pycache__/
+*.py[cod]
+
+# streamlit
+.streamlit/secrets.toml
+
+# ผลลัพธ์กราฟ HTML ที่ thai_stock_dashboard.py เซฟไว้
+StockCharts/
+
+# macOS
+.DS_Store
