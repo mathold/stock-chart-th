@@ -31,7 +31,7 @@ import thai_stock_dashboard as d
 HERE = os.path.dirname(os.path.abspath(__file__))
 SYMBOLS_CSV = os.path.join(HERE, "symbols.csv")
 CACHE_SECONDS = 900                     # จำข้อมูลไว้ 15 นาที กดดูซ้ำจะเร็ว
-PLACEHOLDER = "— เลือกจาก SET100 —"
+GROUP_ORDER = ["SET50", "SET100", "mai"]   # ลำดับที่อยากให้โชว์ในช่องเลือกกลุ่ม
 
 # ดัชนี: ชื่อสัญลักษณ์บน Yahoo ไม่แน่นอน ลองไล่ทีละตัวจนกว่าจะเจอข้อมูล
 INDEX_TARGETS = {
@@ -112,15 +112,28 @@ def load_intraday(ticker: str) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=86400)
-def set100() -> list[str]:
+def symbol_groups() -> dict[str, list[str]]:
+    """อ่าน symbols.csv → {กลุ่ม: [ชื่อย่อ]}
+
+    ไฟล์รุ่นเก่าที่มีแต่คอลัมน์ symbol ก็ยังอ่านได้ (นับเป็นกลุ่ม SET100 ทั้งหมด)
+    """
     if not os.path.exists(SYMBOLS_CSV):
-        return []
+        return {}
     with open(SYMBOLS_CSV, encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
     if not rows:
-        return []
+        return {}
+
     key = "symbol" if "symbol" in rows[0] else list(rows[0])[0]
-    return sorted({(r.get(key) or "").strip().upper() for r in rows} - {""})
+    groups: dict[str, set[str]] = {}
+    for r in rows:
+        sym = (r.get(key) or "").strip().upper()
+        if sym:
+            groups.setdefault((r.get("group") or "SET100").strip(), set()).add(sym)
+
+    order = [g for g in GROUP_ORDER if g in groups] + \
+            [g for g in groups if g not in GROUP_ORDER]
+    return {g: sorted(groups[g]) for g in order}
 
 
 def candidates_for(symbol: str) -> list[str]:
@@ -153,12 +166,17 @@ def build(symbol: str):
 
 st.session_state.setdefault("symbol", "SET")
 
-c1, c2, c3, c4, c5 = st.columns([4, 4, 1.1, 1.3, 1.1])
+c1, c2, c3, c4, c5, c6 = st.columns([3.4, 1.5, 3.3, 1, 1.2, 1.1])
 
 typed = c1.text_input("ชื่อหุ้น", key="typed", label_visibility="collapsed",
                       placeholder="พิมพ์ชื่อหุ้น เช่น PTT แล้วกด Enter")
-names = set100()
-choice = c2.selectbox("SET100", [PLACEHOLDER] + names, key="choice",
+
+groups = symbol_groups()
+group = c2.selectbox("กลุ่ม", list(groups) or ["—"], key="group",
+                     label_visibility="collapsed", disabled=not groups)
+names = groups.get(group, [])
+placeholder = f"— เลือกจาก {group} —" if names else "— ไม่มีรายชื่อ —"
+choice = c3.selectbox("หุ้นในกลุ่ม", [placeholder] + names, key="choice",
                       label_visibility="collapsed",
                       disabled=not names)
 
@@ -170,14 +188,14 @@ if typed != st.session_state.get("_prev_typed"):
 
 if choice != st.session_state.get("_prev_choice"):
     st.session_state._prev_choice = choice
-    if choice != PLACEHOLDER:
+    if choice not in (placeholder, "— ไม่มีรายชื่อ —"):
         st.session_state.symbol = choice
 
-if c3.button("SET", **FULL_BTN):
+if c4.button("SET", **FULL_BTN):
     st.session_state.symbol = "SET"
-if c4.button("SET50", **FULL_BTN):
+if c5.button("SET50", **FULL_BTN):
     st.session_state.symbol = "SET50"
-if c5.button("รีเฟรช", **FULL_BTN, help="ดึงราคาใหม่ ไม่ใช้ข้อมูลที่จำไว้"):
+if c6.button("รีเฟรช", **FULL_BTN, help="ดึงราคาใหม่ ไม่ใช้ข้อมูลที่จำไว้"):
     st.cache_data.clear()
 
 symbol = st.session_state.symbol
