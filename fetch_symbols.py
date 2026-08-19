@@ -6,7 +6,7 @@
     python fetch_symbols.py รายชื่อ.xlsx --group mai  # แปลงจากไฟล์ที่โหลดมาเอง (กลุ่มเดียว)
 
 กลุ่มที่รองรับ: SET50 · SET100 · mai · US (หุ้นเมกา) · Crypto ·
-              Commodity (ทอง/น้ำมัน/สินค้าเกษตร) · Index (ดัชนีหุ้นทั่วโลก)
+              Commodity (ทอง/น้ำมัน/สินค้าเกษตร) · Index (ดัชนีหุ้นทั่วโลก) · Bond (ตราสารหนี้)
 
 ลำดับการทำงาน
   1. ลองเรียก API ของ SET ทีละกลุ่ม
@@ -53,6 +53,7 @@ GROUPS = {
     "Crypto": [],
     "Commodity": [],
     "Index": [],
+    "Bond": [],
 }
 
 HEADERS = {
@@ -113,6 +114,15 @@ ZC=F ZS=F ZW=F KC=F SB=F CT=F CC=F LE=F
 ^SET.BK ^GSPC ^DJI ^IXIC ^NDX ^RUT ^VIX ^N225 ^HSI ^KS11 ^TWII ^STI
 000001.SS ^JKSE ^KLSE ^BSESN ^NSEI ^AXJO ^FTSE ^GDAXI ^FCHI ^STOXX50E
 """.split(),
+
+    # ตราสารหนี้ — สองแบบปนกัน อ่านคู่กันได้เลย
+    #   ETF (TLT/AGG/...) = "ราคา" พันธบัตร ขึ้นเมื่อดอกเบี้ยลง
+    #   ^TNX/^TYX/...     = "ผลตอบแทน" (%) วิ่งสวนทางกับราคา
+    # ไทยไม่มีดัชนีพันธบัตรบน Yahoo (ThaiBMA ไม่เปิด API) จึงยังไม่มีในลิสต์
+    "Bond": """
+TLT IEF SHY AGG BND TIP LQD HYG BNDX BWX IGOV EMB
+^TNX ^TYX ^FVX ^IRX
+""".split(),
 }
 
 # ชื่อไทยกำกับ — โชว์ในดรอปดาวน์ให้รู้ว่าตัวย่อคืออะไร (ว่าง = ใช้ตัวย่อตรง ๆ)
@@ -131,6 +141,17 @@ NAMES = {
     "^BSESN": "เซนเซ็กซ์ อินเดีย", "^NSEI": "นิฟตี้ อินเดีย", "^AXJO": "ออสเตรเลีย",
     "^FTSE": "ฟุตซี่ อังกฤษ", "^GDAXI": "แดกซ์ เยอรมนี", "^FCHI": "ฝรั่งเศส",
     "^STOXX50E": "ยูโรสต็อกซ์ 50",
+
+    "TLT": "พันธบัตรสหรัฐ 20 ปีขึ้นไป", "IEF": "พันธบัตรสหรัฐ 7-10 ปี",
+    "SHY": "พันธบัตรสหรัฐ 1-3 ปี", "AGG": "ตราสารหนี้สหรัฐรวมตลาด",
+    "BND": "ตราสารหนี้สหรัฐรวมตลาด (Vanguard)", "TIP": "พันธบัตรชดเชยเงินเฟ้อ สหรัฐ",
+    "LQD": "หุ้นกู้เกรดลงทุน สหรัฐ", "HYG": "หุ้นกู้ผลตอบแทนสูง สหรัฐ",
+    "BNDX": "ตราสารหนี้โลก (ไม่รวมสหรัฐ)", "BWX": "พันธบัตรรัฐบาลโลก (ไม่รวมสหรัฐ)",
+    "IGOV": "พันธบัตรรัฐบาลนอกสหรัฐ", "EMB": "พันธบัตรตลาดเกิดใหม่ (สกุลดอลลาร์)",
+    "^TNX": "ผลตอบแทนพันธบัตรสหรัฐ 10 ปี (%)",
+    "^TYX": "ผลตอบแทนพันธบัตรสหรัฐ 30 ปี (%)",
+    "^FVX": "ผลตอบแทนพันธบัตรสหรัฐ 5 ปี (%)",
+    "^IRX": "ผลตอบแทนตั๋วเงินคลังสหรัฐ 3 เดือน (%)",
 }
 
 
@@ -198,7 +219,7 @@ def save(by_group: dict[str, list[str]], sources: dict[str, str]) -> None:
         for g in order:
             # ดัชนี/สินค้าโภคภัณฑ์เรียงตามลำดับที่เขียนไว้ (ตัวสำคัญขึ้นก่อน)
             syms = by_group.get(g, [])
-            syms = syms if g in ("Commodity", "Index") else sorted(set(syms))
+            syms = syms if g in ("Commodity", "Index", "Bond") else sorted(set(syms))
             for s in dict.fromkeys(syms):
                 w.writerow([s, g, NAMES.get(s, "")])
 
@@ -228,7 +249,7 @@ def main():
     by_group: dict[str, list[str]] = {}
     sources: dict[str, str] = {}
     for group, urls in GROUPS.items():
-        if not urls:                       # US / Crypto / Commodity / Index — ไม่มี API
+        if not urls:                       # US / Crypto / Commodity / Index / Bond — ไม่มี API
             by_group[group] = list(FALLBACK[group])
             sources[group] = "รายชื่อในสคริปต์"
             continue

@@ -31,7 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SYMBOLS_CSV = os.path.join(HERE, "symbols.csv")
 CACHE_SECONDS = 900                     # จำข้อมูลไว้ 15 นาที กดดูซ้ำจะเร็ว
 GROUP_ORDER = ["SET50", "SET100", "mai", "US",             # ลำดับในช่องเลือกกลุ่ม
-               "Crypto", "Commodity", "Index"]
+               "Crypto", "Commodity", "Index", "Bond"]
 
 # ความยาวแท่งของช่อง intraday (นาที) — ไทยวันทำการสั้นกว่า เลยใช้แท่งถี่กว่า
 INTRADAY_MINUTES_TH = 120
@@ -41,7 +41,7 @@ INTRADAY_MINUTES_GLOBAL = 240           # หุ้นเมกา + คริ�
 # "Raw" = ชื่อในลิสต์เป็นชื่อบน Yahoo อยู่แล้ว (GC=F, ^GSPC) ใช้ตรง ๆ ห้ามเติมอะไร
 GROUP_MARKET = {"SET50": "TH", "SET100": "TH", "mai": "TH",
                 "US": "US", "Crypto": "Crypto",
-                "Commodity": "Raw", "Index": "Raw"}
+                "Commodity": "Raw", "Index": "Raw", "Bond": "Raw"}
 
 # ดัชนี: ชื่อสัญลักษณ์บน Yahoo ไม่แน่นอน ลองไล่ทีละตัวจนกว่าจะเจอข้อมูล
 INDEX_TARGETS = {
