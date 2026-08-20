@@ -59,7 +59,7 @@ UP_COLOR, DOWN_COLOR = "#00A651", "#E23B3B"
 BG_COLOR = "#FFFFFF"
 GRID_COLOR = "#DCDCDC"                 # เส้นตารางเข้มขึ้นนิด อ่านระดับราคาง่ายกว่าเดิม
 TEXT_COLOR = "#000000"                 # ตัวหนังสือทั้งกราฟเป็นสีดำ
-AXIS_FONT_SIZE = 11                    # ตัวเลขแกนราคา (ซ้ายมือ) — ใหญ่ขึ้นให้อ่านง่ายบน iPad
+AXIS_FONT_SIZE = 11                    # ตัวเลขแกนราคา (ขวามือ) — ใหญ่ขึ้นให้อ่านง่ายบน iPad
 TAG_FONT_SIZE = 10.5                   # ป้ายค่าล่าสุดที่ติดขอบขวาของช่อง
 
 TIMEFRAMES = ["120m", "Day", "Week", "Month"]   # ลำดับ: ซ้ายบน, ขวาบน, ซ้ายล่าง, ขวาล่าง
@@ -164,9 +164,10 @@ def fmt(v, digits: int = 2) -> str:
 
 def label_axis(index: pd.DatetimeIndex, tf: str) -> list[str]:
     """ใช้ป้ายข้อความเป็นแกน X เพื่อไม่ให้เกิดช่องว่างวันหยุด/พักเที่ยง"""
-    # ช่อง intraday ชื่อไม่ตายตัว (120m / 240m) เลยดูที่ตัวท้ายว่าเป็น m ไหม
-    fmt = ("%d/%m %H:%M" if tf.endswith("m")
-           else {"Day": "%d/%m/%y", "Week": "%d/%m/%y", "Month": "%m/%Y"}[tf])
+    # ช่อง intraday ชื่อไม่ตายตัว (60m / 120m / 240m) เลยดูที่ตัวท้ายว่าเป็น m ไหม
+    styles = {"Day": "%d/%m/%y", "Week": "%d/%m/%y", "Month": "%m/%Y",
+              "Quarter": "%m/%Y", "Year": "%Y"}
+    fmt = "%d/%m %H:%M" if tf.endswith("m") else styles.get(tf, "%d/%m/%y")
     return [t.strftime(fmt) for t in index]
 
 
@@ -190,7 +191,7 @@ def readout(fig, text: str, row: int, col: int, size: int = 9.5):
 
 
 def value_tag(fig, value, color: str, row: int, col: int, digits: int = 2):
-    """ป้ายค่าล่าสุด — ติดขอบ "ขวา" ของช่อง (ตัวเลข tick แกนราคายังอยู่ซ้ายเหมือนเดิม)
+    """ป้ายค่าล่าสุด — ติดขอบ "ขวา" ของช่อง ทับตัวเลขแกนราคาตรงระดับนั้นพอดี
 
     วางนอกกรอบกราฟ จึงต้องมี margin ขวา/ระยะห่างระหว่างคอลัมน์กว้างพอ
     ไม่งั้นป้ายจะโดนตัด — ดูค่า margin(r=...) และ horizontal_spacing ข้างล่าง
@@ -287,8 +288,8 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
     fig = make_subplots(
         rows=6, cols=2,
         row_heights=[0.21, 0.06, 0.07, 0.21, 0.06, 0.07],
-        # horizontal_spacing ต้องพอสำหรับ ป้ายค่าล่าสุดของคอลัมน์ซ้าย + ตัวเลขแกนของคอลัมน์ขวา
-        vertical_spacing=0.028, horizontal_spacing=0.095,
+        # horizontal_spacing ต้องพอสำหรับ ตัวเลขแกน + ป้ายค่าล่าสุด ของคอลัมน์ซ้าย
+        vertical_spacing=0.028, horizontal_spacing=0.09,
     )
 
     # ไล่ตามลำดับคีย์ใน panels (ช่องแรกชื่อ 120m หรือ 240m แล้วแต่ตลาด)
@@ -307,15 +308,42 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
         for offset in (0, 1):
             fig.update_xaxes(showticklabels=False, row=base_row + offset, col=col)
 
+    for base_row, col in PANEL_POS:
+        fig.update_yaxes(range=[0, 100], dtick=25, row=base_row + 2, col=col)
+
+    _style(fig, ticker, height, legend_x=0.30)
+    return fig
+
+
+def build_single_figure(ticker: str, df: pd.DataFrame, tf: str,
+                        height: int | None = CHART_HEIGHT) -> go.Figure:
+    """โหมดเต็มจอ — ไทม์เฟรมเดียว 3 แถว (ราคา / MACD / RSI) ใช้พื้นที่ทั้งหน้า"""
+    fig = make_subplots(rows=3, cols=1, row_heights=[0.66, 0.14, 0.20],
+                        vertical_spacing=0.022)
+    draw_panel(fig, df, tf, 1, 1, show_legend=True)
+
+    for offset in (1, 2):
+        fig.update_xaxes(matches="x", row=1 + offset, col=1)
+    for offset in (0, 1):
+        fig.update_xaxes(showticklabels=False, row=1 + offset, col=1)
+    fig.update_yaxes(range=[0, 100], dtick=25, row=3, col=1)
+
+    # เต็มจอมีที่เยอะ ขยับตัวเลขให้ใหญ่ขึ้นอีกนิด
+    fig.update_xaxes(nticks=12)
+    _style(fig, ticker, height, legend_x=0.24)
+    fig.update_yaxes(tickfont=dict(size=AXIS_FONT_SIZE + 1.5, color=TEXT_COLOR))
+    return fig
+
+
+def _style(fig: go.Figure, ticker: str, height: int | None, legend_x: float) -> None:
+    """สไตล์ที่ใช้ร่วมกันทั้งโหมด 4 จอ และโหมดเต็มจอ"""
     fig.update_xaxes(type="category", nticks=7, rangeslider_visible=False,
                      showgrid=True, gridcolor=GRID_COLOR,
                      tickangle=0, tickfont=dict(size=9.5, color=TEXT_COLOR))
-    # ตัวเลขแกนราคาอยู่ซ้ายมือทุกช่อง · ป้ายค่าล่าสุดเกาะขอบขวา
+    # ตัวเลขแกนราคาอยู่ "ขวามือ" ทุกช่อง — ป้ายค่าล่าสุดเกาะขวาทับตัวเลขตรงระดับนั้น
     fig.update_yaxes(showgrid=True, gridcolor=GRID_COLOR,
                      tickfont=dict(size=AXIS_FONT_SIZE, color=TEXT_COLOR),
-                     side="left", ticklabelposition="outside")
-    for base_row, col in PANEL_POS:
-        fig.update_yaxes(range=[0, 100], dtick=25, row=base_row + 2, col=col)
+                     side="right", ticklabelposition="outside")
 
     fig.update_layout(
         title=dict(text=f"{ticker}  ·  {now_bkk():%d/%m/%Y %H:%M}",
@@ -323,14 +351,13 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
         height=height, autosize=True,
         paper_bgcolor=BG_COLOR, plot_bgcolor=BG_COLOR,
         font=dict(family="Arial, sans-serif", size=11, color=TEXT_COLOR),
-        # l = ที่ของตัวเลขแกนราคา · r = ที่ของป้ายค่าล่าสุด (เผื่อราคา 6 หลักแบบ BTC)
-        margin=dict(l=46, r=72, t=74, b=8),
-        legend=dict(orientation="h", y=1.045, x=0.30,
+        # ฝั่งขวาต้องกว้างพอสำหรับ ตัวเลขแกน + ป้ายค่าล่าสุด (เผื่อราคา 6 หลักแบบ BTC)
+        margin=dict(l=14, r=80, t=74, b=8),
+        legend=dict(orientation="h", y=1.045, x=legend_x,
                     font=dict(size=10, color=TEXT_COLOR),
                     bgcolor="rgba(0,0,0,0)"),
         hovermode="x unified", dragmode="pan", bargap=0.1,
     )
-    return fig
 
 
 def save(fig: go.Figure, ticker: str, out_dir: str | None = None) -> str:

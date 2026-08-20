@@ -57,6 +57,18 @@ st.set_page_config(page_title="กราฟหุ้นไทย", page_icon="�
 # (Plotly ต้องได้ตัวเลขชัด ๆ ถ้าปล่อย autosize มันจะตกกลับไปใช้ default 450 px)
 CHART_HEIGHT_PX = 750
 
+# โหมดเต็มจอ: ไทม์เฟรมเดียวเต็มหน้า — เสียความสูงให้แถวเลือกไทม์เฟรมอีกแถว
+FULL_TFS = ["60m", "120m", "Day", "Week", "Month", "Quarter", "Year"]
+FULL_TF_ROW_PX = 42                     # ความสูงของแถวปุ่มเลือกไทม์เฟรม
+
+# ต้องตั้งค่าเริ่มต้นก่อนใส่ CSS เพราะความสูงกราฟขึ้นกับโหมดที่อยู่
+st.session_state.setdefault("symbol", "SET")
+st.session_state.setdefault("market", None)      # None = ให้ระบบเดาตลาดเอง
+st.session_state.setdefault("fullscreen", False)  # True = โหมดไทม์เฟรมเดียวเต็มจอ
+
+chart_height = (CHART_HEIGHT_PX - FULL_TF_ROW_PX
+                if st.session_state.fullscreen else CHART_HEIGHT_PX)
+
 st.markdown(f"""
 <style>
   header[data-testid="stHeader"], [data-testid="stToolbar"], footer {{ display: none !important; }}
@@ -64,8 +76,14 @@ st.markdown(f"""
   [data-testid="stVerticalBlock"] {{ gap: .3rem !important; }}
   [data-testid="stCaptionContainer"] p {{ font-size: .68rem; line-height: 1.2; margin: 0; }}
   [data-testid="stPlotlyChart"], [data-testid="stPlotlyChart"] > div {{
-      height: {CHART_HEIGHT_PX}px !important;
+      height: {chart_height}px !important;
   }}
+  /* ดรอปดาวน์ยาวขึ้น — ของเดิมโชว์ได้ 7 บรรทัดพอดี กลุ่มที่ 8 (Bond) เลยตกขอบ
+     จนดูเหมือนไม่มี ต้องเลื่อนในกล่องเล็ก ๆ ซึ่งบน iPad ทำยาก */
+  div[role="listbox"] {{ max-height: 62vh !important; }}
+  /* แถวเลือกไทม์เฟรมให้เตี้ยที่สุด ทุก px คือความสูงที่กราฟได้เพิ่ม */
+  [data-testid="stRadio"] > div {{ gap: .35rem !important; }}
+  [data-testid="stRadio"] label {{ margin: 0 !important; padding: 0 !important; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -122,8 +140,11 @@ def load_intraday(ticker: str, minutes: int) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=86400)
-def symbol_groups() -> tuple[dict[str, list[str]], dict[str, str]]:
+def _symbol_groups(stamp: float) -> tuple[dict[str, list[str]], dict[str, str]]:
     """อ่าน symbols.csv → ({กลุ่ม: [ชื่อย่อ]}, {ชื่อย่อ: ชื่อไทย})
+
+    `stamp` = เวลาแก้ไขไฟล์ ใส่ไว้เป็นส่วนหนึ่งของคีย์ cache เฉย ๆ
+    เพิ่มหุ้น/กลุ่มใหม่ในไฟล์แล้วดรอปดาวน์อัปเดตทันที ไม่ต้องรอ cache 24 ชม. หมดอายุ
 
     เรียงตามลำดับในไฟล์ (ดัชนี/สินค้าโภคภัณฑ์เรียงตัวสำคัญขึ้นก่อน)
     ไฟล์รุ่นเก่าที่มีแต่คอลัมน์ symbol ก็ยังอ่านได้ (นับเป็นกลุ่ม SET100 ทั้งหมด)
@@ -154,6 +175,11 @@ def symbol_groups() -> tuple[dict[str, list[str]], dict[str, str]]:
     return {g: groups[g] for g in order}, labels
 
 
+def symbol_groups() -> tuple[dict[str, list[str]], dict[str, str]]:
+    stamp = os.path.getmtime(SYMBOLS_CSV) if os.path.exists(SYMBOLS_CSV) else 0.0
+    return _symbol_groups(stamp)
+
+
 def candidates_for(symbol: str, market: str | None = None) -> list[str]:
     """ชื่อบน Yahoo ที่จะลองไล่ดึง — คนละตลาดเติมท้ายคนละแบบ
 
@@ -176,14 +202,37 @@ def candidates_for(symbol: str, market: str | None = None) -> list[str]:
     return [f"{s}.BK", s, f"{s}-USD"]
 
 
-def build(symbol: str, market: str | None = None):
-    """คืน (figure, สัญลักษณ์ที่ใช้ได้, มี intraday ไหม) หรือ None ถ้าไม่มีข้อมูล"""
+def one_panel(cand: str, tf: str, daily: pd.DataFrame) -> pd.DataFrame:
+    """ข้อมูลของไทม์เฟรมเดียว (ใช้ในโหมดเต็มจอ)
+
+    60m/120m ดึงรายชั่วโมงมารวมแท่ง · ที่เหลือย่อยจากรายวันที่ดึงมาแล้ว
+    """
+    if tf.endswith("m"):
+        return load_intraday(cand, int(tf[:-1]))
+    if tf == "Day":
+        return daily
+    rule = {"Week": "W-FRI", "Month": "ME", "Quarter": "QE", "Year": "YE"}[tf]
+    return d.to_period(daily, rule)
+
+
+def build(symbol: str, market: str | None = None, full_tf: str | None = None):
+    """คืน (figure, สัญลักษณ์ที่ใช้ได้, ข้อมูลครบไหม) หรือ None ถ้าไม่มีข้อมูลเลย
+
+    full_tf = None → กราฟ 4 จอเหมือนเดิม · ใส่ชื่อไทม์เฟรม → เต็มจอช่องเดียว
+    """
     for cand in candidates_for(symbol, market):
         daily = load_daily(cand)
         if not daily.empty and len(daily) >= 5:
             break
     else:
         return None
+
+    if full_tf:
+        df = one_panel(cand, full_tf, daily)
+        if df is None or df.empty:
+            return (None, cand, False)
+        return (d.build_single_figure(symbol.upper(), df, full_tf,
+                                      height=chart_height), cand, True)
 
     # หุ้นไทยใช้แท่ง 120 นาที (วันทำการสั้น) · เมกา/คริปโตใช้ 240 นาที
     # ดูจากชื่อที่ดึงได้จริง ไม่ใช่จากกลุ่ม เพราะพิมพ์เองก็ต้องได้ถูกเหมือนกัน
@@ -195,7 +244,7 @@ def build(symbol: str, market: str | None = None):
         "Week": d.to_period(daily, "W-FRI"),
         "Month": d.to_period(daily, "ME"),
     }
-    return (d.build_figure(symbol.upper(), panels, height=CHART_HEIGHT_PX),
+    return (d.build_figure(symbol.upper(), panels, height=chart_height),
             cand, not intraday.empty)
 
 
@@ -203,10 +252,7 @@ def build(symbol: str, market: str | None = None):
 # หน้าเว็บ
 # ─────────────────────────────────────────────────────────────
 
-st.session_state.setdefault("symbol", "SET")
-st.session_state.setdefault("market", None)      # None = ให้ระบบเดาตลาดเอง
-
-c1, c2, c3, c4, c5, c6 = st.columns([3.4, 1.5, 3.3, 1, 1.2, 1.1])
+c1, c2, c3, c4, c5, c6, c7 = st.columns([3.0, 1.4, 3.0, .9, 1.1, 1.0, 1.2])
 
 typed = c1.text_input("ชื่อหุ้น", key="typed", label_visibility="collapsed",
                       placeholder="พิมพ์ชื่อย่อ เช่น PTT · AAPL · BTC แล้วกด Enter")
@@ -240,11 +286,24 @@ if c5.button("SET50", **FULL_BTN):
 if c6.button("รีเฟรช", **FULL_BTN, help="ดึงราคาใหม่ ไม่ใช้ข้อมูลที่จำไว้"):
     st.cache_data.clear()
 
+full_label = "4 จอ" if st.session_state.fullscreen else "Full"
+if c7.button(full_label, **FULL_BTN,
+             help="สลับระหว่างกราฟ 4 ไทม์เฟรม กับไทม์เฟรมเดียวเต็มจอ"):
+    st.session_state.fullscreen = not st.session_state.fullscreen
+    st.rerun()                          # ความสูงกราฟเปลี่ยนตามโหมด ต้องวาด CSS ใหม่
+
+# แถวเลือกไทม์เฟรม — โผล่เฉพาะโหมดเต็มจอ
+full_tf = None
+if st.session_state.fullscreen:
+    full_tf = st.radio("ไทม์เฟรม", FULL_TFS, key="full_tf",
+                       index=FULL_TFS.index("Day"), horizontal=True,
+                       label_visibility="collapsed")
+
 symbol = st.session_state.symbol
 
 st.session_state.fetch_errors = []
 with st.spinner(f"กำลังดึงข้อมูล {symbol} ..."):
-    result = build(symbol, st.session_state.market)
+    result = build(symbol, st.session_state.market, full_tf)
 
 if result is None:
     st.error(f"ไม่พบข้อมูลของ **{symbol}**")
@@ -257,7 +316,12 @@ if result is None:
                "หุ้นที่เพิ่งเข้าตลาดหรือสภาพคล่องต่ำ Yahoo อาจยังไม่มีข้อมูล")
     st.stop()
 
-fig, used, has_intraday = result
+fig, used, has_data = result
+
+if fig is None:                     # เต็มจอ: หุ้นตัวนี้ไม่มีข้อมูลของไทม์เฟรมที่เลือก
+    st.warning(f"**{used}** ไม่มีข้อมูลไทม์เฟรม **{full_tf}** — "
+               "ลองเลือกไทม์เฟรมอื่น (intraday ของบางตัว Yahoo ไม่มีให้)")
+    st.stop()
 
 st.plotly_chart(fig, **FULL_CHART, config={
     "scrollZoom": True, "displaylogo": False, "responsive": True,
@@ -265,7 +329,7 @@ st.plotly_chart(fig, **FULL_CHART, config={
 
 # รวมเป็นบรรทัดเดียว — ทุก px ที่ประหยัดได้ตรงนี้คือความสูงที่กราฟได้เพิ่ม
 note = f"สัญลักษณ์: `{used}` · ณ {d.now_bkk():%d/%m/%Y %H:%M} น. (เวลาไทย)"
-if not has_intraday:
+if not has_data and not full_tf:
     note += " · ไม่มี intraday ช่องแรกจึงว่าง"
 note += (" · ราคาจาก Yahoo Finance เป็นข้อมูลปิดตลาด/ดีเลย์ ไม่ใช่เรียลไทม์ "
          "ใช้ประกอบการศึกษา ตรวจกับโบรกเกอร์ก่อนซื้อขาย")
