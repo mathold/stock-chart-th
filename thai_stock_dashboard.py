@@ -60,7 +60,7 @@ BG_COLOR = "#FFFFFF"
 GRID_COLOR = "#DCDCDC"                 # เส้นตารางเข้มขึ้นนิด อ่านระดับราคาง่ายกว่าเดิม
 TEXT_COLOR = "#000000"                 # ตัวหนังสือทั้งกราฟเป็นสีดำ
 AXIS_FONT_SIZE = 11                    # ตัวเลขแกนราคา (ซ้ายมือ) — ใหญ่ขึ้นให้อ่านง่ายบน iPad
-TAG_FONT_SIZE = 10.5                   # ป้ายค่าล่าสุดที่ติดแกนราคาฝั่งซ้าย
+TAG_FONT_SIZE = 10.5                   # ป้ายค่าล่าสุดที่ติดขอบขวาของช่อง
 
 TIMEFRAMES = ["120m", "Day", "Week", "Month"]   # ลำดับ: ซ้ายบน, ขวาบน, ซ้ายล่าง, ขวาล่าง
 
@@ -190,16 +190,16 @@ def readout(fig, text: str, row: int, col: int, size: int = 9.5):
 
 
 def value_tag(fig, value, color: str, row: int, col: int, digits: int = 2):
-    """ป้ายค่าล่าสุด — ติดแกนราคาฝั่ง "ซ้าย" ของช่อง (ทับตัวเลข tick ตรงระดับนั้นพอดี)
+    """ป้ายค่าล่าสุด — ติดขอบ "ขวา" ของช่อง (ตัวเลข tick แกนราคายังอยู่ซ้ายเหมือนเดิม)
 
-    วางนอกกรอบกราฟ (x domain ติดลบ) จึงต้องมี margin ซ้าย/ระยะห่างระหว่างคอลัมน์
-    กว้างพอ ไม่งั้นป้ายจะโดนตัด — ดูค่า margin(l=...) และ horizontal_spacing ข้างล่าง
+    วางนอกกรอบกราฟ จึงต้องมี margin ขวา/ระยะห่างระหว่างคอลัมน์กว้างพอ
+    ไม่งั้นป้ายจะโดนตัด — ดูค่า margin(r=...) และ horizontal_spacing ข้างล่าง
     """
     if value is None or pd.isna(value):
         return
     fig.add_annotation(
-        xref="x domain", yref="y", x=-0.008, y=float(value),
-        xanchor="right", yanchor="middle",
+        xref="x domain", yref="y", x=1.008, y=float(value),
+        xanchor="left", yanchor="middle",
         text=f" {fmt(value, digits)} ", showarrow=False,
         font=dict(size=TAG_FONT_SIZE, color="#FFFFFF"),
         bgcolor=color, borderpad=2.5,
@@ -287,7 +287,7 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
     fig = make_subplots(
         rows=6, cols=2,
         row_heights=[0.21, 0.06, 0.07, 0.21, 0.06, 0.07],
-        # horizontal_spacing เว้นที่ให้ "แกนราคา + ป้ายค่าล่าสุด" ของคอลัมน์ขวา
+        # horizontal_spacing ต้องพอสำหรับ ป้ายค่าล่าสุดของคอลัมน์ซ้าย + ตัวเลขแกนของคอลัมน์ขวา
         vertical_spacing=0.028, horizontal_spacing=0.095,
     )
 
@@ -310,7 +310,7 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
     fig.update_xaxes(type="category", nticks=7, rangeslider_visible=False,
                      showgrid=True, gridcolor=GRID_COLOR,
                      tickangle=0, tickfont=dict(size=9.5, color=TEXT_COLOR))
-    # แกนราคาอยู่ซ้ายมือทุกช่อง — ป้ายค่าล่าสุดก็มาเกาะฝั่งซ้ายเหมือนกัน
+    # ตัวเลขแกนราคาอยู่ซ้ายมือทุกช่อง · ป้ายค่าล่าสุดเกาะขอบขวา
     fig.update_yaxes(showgrid=True, gridcolor=GRID_COLOR,
                      tickfont=dict(size=AXIS_FONT_SIZE, color=TEXT_COLOR),
                      side="left", ticklabelposition="outside")
@@ -323,8 +323,8 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
         height=height, autosize=True,
         paper_bgcolor=BG_COLOR, plot_bgcolor=BG_COLOR,
         font=dict(family="Arial, sans-serif", size=11, color=TEXT_COLOR),
-        # l กว้างพอให้ป้ายค่าล่าสุดของคอลัมน์ซ้ายไม่โดนตัด · r แคบได้แล้วเพราะไม่มีป้ายฝั่งขวา
-        margin=dict(l=74, r=14, t=74, b=8),
+        # l = ที่ของตัวเลขแกนราคา · r = ที่ของป้ายค่าล่าสุด (เผื่อราคา 6 หลักแบบ BTC)
+        margin=dict(l=46, r=72, t=74, b=8),
         legend=dict(orientation="h", y=1.045, x=0.30,
                     font=dict(size=10, color=TEXT_COLOR),
                     bgcolor="rgba(0,0,0,0)"),
