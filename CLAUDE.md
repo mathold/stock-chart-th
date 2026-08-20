@@ -73,7 +73,8 @@ cd ~/Desktop/"Stock chart" && .venv/bin/streamlit run app.py
 
 | ค่า | ไฟล์ | ตอนนี้ |
 |---|---|---|
-| จำนวนแท่งต่อช่อง | `thai_stock_dashboard.py` → `BARS` | 200 |
+| จำนวนแท่งต่อช่อง (4 จอ) | `thai_stock_dashboard.py` → `BARS` | 200 |
+| จำนวนแท่ง (โหมด Full) | `thai_stock_dashboard.py` → `BARS_FULL` | 400 |
 | ความสูงกราฟบนเว็บ | `app.py` → `CHART_HEIGHT_PX` | 750 |
 | ขนาดตัวเลขแกนราคา | `thai_stock_dashboard.py` → `AXIS_FONT_SIZE` | 11 |
 | ไทม์เฟรมในโหมดเต็มจอ | `app.py` → `FULL_TFS` | 60m 120m Day Week Month Quarter Year |

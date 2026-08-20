@@ -30,7 +30,8 @@ from plotly.subplots import make_subplots
 
 TICKERS = ["PTT.BK", "KBANK.BK"]      # ใส่กี่ตัวก็ได้ ได้ไฟล์ละตัว (หุ้นไทยต้องมี .BK ต่อท้าย)
 
-BARS = 200                             # จำนวนแท่งที่แสดงต่อหนึ่งช่อง
+BARS = 200                             # จำนวนแท่งที่แสดงต่อหนึ่งช่อง (โหมด 4 จอ)
+BARS_FULL = 400                        # โหมดเต็มจอ ช่องเดียวกว้างกว่า จึงใส่ได้มากกว่า
 CHART_HEIGHT = 1000                    # ความสูงรวม (px) ของไฟล์ HTML
                                        # ฝั่งเว็บ Streamlit ส่ง height=None แล้วคุมด้วย CSS ให้เต็มจอแทน
 OUTPUT_DIR = os.path.expanduser("~/StockCharts")
@@ -208,14 +209,15 @@ def value_tag(fig, value, color: str, row: int, col: int, digits: int = 2):
     )
 
 
-def draw_panel(fig, df: pd.DataFrame, tf: str, base_row: int, col: int, show_legend: bool):
+def draw_panel(fig, df: pd.DataFrame, tf: str, base_row: int, col: int,
+               show_legend: bool, bars: int = BARS):
     df = df.copy()
     for n in EMA_STYLE:
         df[f"EMA{n}"] = ema(df["Close"], n)
     df["RSI"] = rsi(df["Close"], RSI_PERIOD)
     df["MACD"], df["SIG"], df["HIST"] = macd(df["Close"])
 
-    df = df.tail(BARS).round(4)
+    df = df.tail(bars).round(4)
     x = label_axis(df.index, tf)
 
     fig.add_trace(go.Candlestick(
@@ -320,7 +322,7 @@ def build_single_figure(ticker: str, df: pd.DataFrame, tf: str,
     """โหมดเต็มจอ — ไทม์เฟรมเดียว 3 แถว (ราคา / MACD / RSI) ใช้พื้นที่ทั้งหน้า"""
     fig = make_subplots(rows=3, cols=1, row_heights=[0.66, 0.14, 0.20],
                         vertical_spacing=0.022)
-    draw_panel(fig, df, tf, 1, 1, show_legend=True)
+    draw_panel(fig, df, tf, 1, 1, show_legend=True, bars=BARS_FULL)
 
     for offset in (1, 2):
         fig.update_xaxes(matches="x", row=1 + offset, col=1)
