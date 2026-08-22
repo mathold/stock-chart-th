@@ -5,6 +5,7 @@ Thai Stock 4-Panel Dashboard
 
 ไทม์เฟรม : 120 นาที / Day / Week / Month
 แต่ละช่อง : แท่งเทียน + EMA 5,10,25,50,75,200 / RSI(7) / MACD(12,26,9)
+เสริม     : ริบบิ้น EMA 25/75 (ribbon=True — ปุ่ม Cloud บนหน้าเว็บ)
 
 วิธีใช้
 -------
@@ -55,6 +56,16 @@ RSI_LEVELS = {                         # ระดับ : สีเส้นป
 MACD_FAST, MACD_SLOW, MACD_SIGNAL = 12, 26, 9
 MACD_LINE_COLOR = "#1F4EDD"            # น้ำเงิน
 MACD_SIGNAL_COLOR = "#E23B3B"          # แดง
+
+# ── ริบบิ้น (เปิด/ปิดด้วยปุ่ม Cloud บนหน้าเว็บ) ─────────────
+# ระบายพื้นที่ระหว่าง EMA เร็ว/ช้า แล้วเปลี่ยนสีตามว่าเส้นไหนอยู่บน
+# เขียวสด = เร็วอยู่เหนือช้า (ขาขึ้น) · ชมพูสด = เร็วอยู่ใต้ช้า (ขาลง)
+RIBBON_FAST, RIBBON_SLOW = 25, 75      # เปลี่ยนคู่ได้ ไม่จำเป็นต้องมีใน EMA_STYLE
+RIBBON_UP_FILL = "rgba(0,224,110,0.42)"    # เขียวสดโปร่ง
+RIBBON_DOWN_FILL = "rgba(255,45,149,0.30)"  # ชมพูสดโปร่ง
+RIBBON_MARK_UP = "#00B44A"             # ตัว B ตรงจุดที่ริบบิ้นเปลี่ยนเป็นเขียว
+RIBBON_MARK_DOWN = "#FF2D95"           # ตัว S ตรงจุดที่ริบบิ้นเปลี่ยนเป็นชมพู
+RIBBON_MARK_SIZE = 13                  # ขนาดตัวอักษร B/S
 
 UP_COLOR, DOWN_COLOR = "#00A651", "#E23B3B"
 BG_COLOR = "#FFFFFF"
@@ -209,16 +220,74 @@ def value_tag(fig, value, color: str, row: int, col: int, digits: int = 2):
     )
 
 
+def draw_ribbon(fig, df: pd.DataFrame, x: list[str], row: int, col: int,
+                show_legend: bool) -> bool | None:
+    """ริบบิ้น EMA เร็ว/ช้า + วงกลมตรงจุดที่เปลี่ยนสี — คืนสถานะล่าสุด (True = ขาขึ้น)
+
+    ต้องเรียก "ก่อน" วาดแท่งเทียน เพราะ Plotly วาดตามลำดับ trace
+    ถ้าเรียกทีหลังพื้นสีจะไปทับแท่งเทียน
+    """
+    fast, slow = df["_RIB_F"], df["_RIB_S"]
+    bull = (fast >= slow).to_numpy()
+    if len(bull) < 2:
+        return None
+
+    # แบ่งเป็นช่วง ๆ ตามสี แล้วระบายทีละช่วง (ต่อหัวช่วงย้อนไป 1 แท่งไม่ให้มีรอยขาด)
+    breaks = [0] + [i for i in range(1, len(bull)) if bull[i] != bull[i - 1]] + [len(bull)]
+    for a, b in zip(breaks[:-1], breaks[1:]):
+        lo = max(a - 1, 0)
+        xs = x[lo:b]
+        if len(xs) < 2:
+            continue
+        fill = RIBBON_UP_FILL if bull[a] else RIBBON_DOWN_FILL
+        fig.add_trace(go.Scatter(
+            x=xs, y=slow.iloc[lo:b], mode="lines", line=dict(width=0),
+            showlegend=False, hoverinfo="skip",
+        ), row=row, col=col)
+        fig.add_trace(go.Scatter(
+            x=xs, y=fast.iloc[lo:b], mode="lines", fill="tonexty", fillcolor=fill,
+            line=dict(width=0), showlegend=False, hoverinfo="skip",
+        ), row=row, col=col)
+
+    # จุดเปลี่ยนสี — B ใต้แท่ง (กลับเป็นขาขึ้น) · S เหนือแท่ง (กลับเป็นขาลง)
+    flips_up = [i for i in range(1, len(bull)) if bull[i] and not bull[i - 1]]
+    flips_dn = [i for i in range(1, len(bull)) if not bull[i] and bull[i - 1]]
+    for idx, color, key, letter, name, pad, place in (
+            (flips_up, RIBBON_MARK_UP, "Low", "B", "B = ริบบิ้นกลับเป็นขาขึ้น",
+             0.995, "bottom center"),
+            (flips_dn, RIBBON_MARK_DOWN, "High", "S", "S = ริบบิ้นกลับเป็นขาลง",
+             1.005, "top center")):
+        if not idx:
+            continue
+        fig.add_trace(go.Scatter(
+            x=[x[i] for i in idx], y=[df[key].iloc[i] * pad for i in idx],
+            mode="text", name=name,
+            text=[f"<b>{letter}</b>"] * len(idx), textposition=place,
+            textfont=dict(size=RIBBON_MARK_SIZE, color=color),
+            # ไม่ใส่ลง legend — ตัวอย่างของ trace แบบ text ขึ้นเป็น "Aa" ไม่สื่ออะไร
+            # แถมกินความกว้างแถว legend ซึ่งบน iPad มีไม่พออยู่แล้ว
+            legendgroup=name, showlegend=False, hoverinfo="skip",
+        ), row=row, col=col)
+
+    return bool(bull[-1])
+
+
 def draw_panel(fig, df: pd.DataFrame, tf: str, base_row: int, col: int,
-               show_legend: bool, bars: int = BARS):
+               show_legend: bool, bars: int = BARS, ribbon: bool = False):
     df = df.copy()
     for n in EMA_STYLE:
         df[f"EMA{n}"] = ema(df["Close"], n)
     df["RSI"] = rsi(df["Close"], RSI_PERIOD)
     df["MACD"], df["SIG"], df["HIST"] = macd(df["Close"])
+    if ribbon:
+        df["_RIB_F"] = ema(df["Close"], RIBBON_FAST)
+        df["_RIB_S"] = ema(df["Close"], RIBBON_SLOW)
 
     df = df.tail(bars).round(4)
     x = label_axis(df.index, tf)
+
+    # ริบบิ้นต้องมาก่อนแท่งเทียน ไม่งั้นพื้นสีทับแท่ง
+    rib_bull = draw_ribbon(fig, df, x, base_row, col, show_legend) if ribbon else None
 
     fig.add_trace(go.Candlestick(
         x=x, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
@@ -272,6 +341,11 @@ def draw_panel(fig, df: pd.DataFrame, tf: str, base_row: int, col: int,
         f'<span style="color:{c}">E{n} {fmt(last[f"EMA{n}"])}</span>'
         for n, (c, _) in EMA_STYLE.items()
     )
+    if rib_bull is not None:
+        rib_color = RIBBON_MARK_UP if rib_bull else RIBBON_MARK_DOWN
+        rib_word = "ขาขึ้น" if rib_bull else "ขาลง"
+        emas += (f'   <span style="color:{rib_color}"><b>'
+                 f'ริบบิ้น {RIBBON_FAST}/{RIBBON_SLOW} {rib_word}</b></span>')
     readout(fig, f"{ohlc}<br>{emas}", base_row, col)
     value_tag(fig, last["Close"], bar_color, base_row, col)
 
@@ -285,8 +359,12 @@ def draw_panel(fig, df: pd.DataFrame, tf: str, base_row: int, col: int,
 
 
 def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
-                 height: int | None = CHART_HEIGHT) -> go.Figure:
-    """height=None = ไม่ล็อกความสูง ปล่อยให้ยืดตามกล่องที่ครอบอยู่ (ใช้กับเว็บ)"""
+                 height: int | None = CHART_HEIGHT,
+                 ribbon: bool = False) -> go.Figure:
+    """height=None = ไม่ล็อกความสูง ปล่อยให้ยืดตามกล่องที่ครอบอยู่ (ใช้กับเว็บ)
+
+    ribbon=True = เปิดริบบิ้น EMA (ปุ่ม Cloud บนหน้าเว็บ)
+    """
     fig = make_subplots(
         rows=6, cols=2,
         row_heights=[0.21, 0.06, 0.07, 0.21, 0.06, 0.07],
@@ -301,7 +379,7 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
         if df is None or df.empty:
             continue
         base_row, col = PANEL_POS[i]
-        draw_panel(fig, df, tf, base_row, col, show_legend=(i == 0))
+        draw_panel(fig, df, tf, base_row, col, show_legend=(i == 0), ribbon=ribbon)
 
     # ให้แกน X ของสามแถวในช่องเดียวกันเลื่อน/ซูมพร้อมกัน
     for base_row, col, anchor in ((1, 1, "x"), (1, 2, "x2"), (4, 1, "x7"), (4, 2, "x8")):
@@ -318,11 +396,12 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
 
 
 def build_single_figure(ticker: str, df: pd.DataFrame, tf: str,
-                        height: int | None = CHART_HEIGHT) -> go.Figure:
+                        height: int | None = CHART_HEIGHT,
+                        ribbon: bool = False) -> go.Figure:
     """โหมดเต็มจอ — ไทม์เฟรมเดียว 3 แถว (ราคา / MACD / RSI) ใช้พื้นที่ทั้งหน้า"""
     fig = make_subplots(rows=3, cols=1, row_heights=[0.66, 0.14, 0.20],
                         vertical_spacing=0.022)
-    draw_panel(fig, df, tf, 1, 1, show_legend=True, bars=BARS_FULL)
+    draw_panel(fig, df, tf, 1, 1, show_legend=True, bars=BARS_FULL, ribbon=ribbon)
 
     for offset in (1, 2):
         fig.update_xaxes(matches="x", row=1 + offset, col=1)

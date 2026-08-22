@@ -65,6 +65,7 @@ FULL_TF_ROW_PX = 42                     # ความสูงของแถ�
 st.session_state.setdefault("symbol", "SET")
 st.session_state.setdefault("market", None)      # None = ให้ระบบเดาตลาดเอง
 st.session_state.setdefault("fullscreen", False)  # True = โหมดไทม์เฟรมเดียวเต็มจอ
+st.session_state.setdefault("cloud", False)       # True = เปิดริบบิ้น EMA (ปุ่ม Cloud)
 
 chart_height = (CHART_HEIGHT_PX - FULL_TF_ROW_PX
                 if st.session_state.fullscreen else CHART_HEIGHT_PX)
@@ -215,10 +216,12 @@ def one_panel(cand: str, tf: str, daily: pd.DataFrame) -> pd.DataFrame:
     return d.to_period(daily, rule)
 
 
-def build(symbol: str, market: str | None = None, full_tf: str | None = None):
+def build(symbol: str, market: str | None = None, full_tf: str | None = None,
+          ribbon: bool = False):
     """คืน (figure, สัญลักษณ์ที่ใช้ได้, ข้อมูลครบไหม) หรือ None ถ้าไม่มีข้อมูลเลย
 
     full_tf = None → กราฟ 4 จอเหมือนเดิม · ใส่ชื่อไทม์เฟรม → เต็มจอช่องเดียว
+    ribbon = True → ระบายริบบิ้น EMA 25/75 ทับพื้นหลัง (ปุ่ม Cloud)
     """
     for cand in candidates_for(symbol, market):
         daily = load_daily(cand)
@@ -232,7 +235,7 @@ def build(symbol: str, market: str | None = None, full_tf: str | None = None):
         if df is None or df.empty:
             return (None, cand, False)
         return (d.build_single_figure(symbol.upper(), df, full_tf,
-                                      height=chart_height), cand, True)
+                                      height=chart_height, ribbon=ribbon), cand, True)
 
     # หุ้นไทยใช้แท่ง 120 นาที (วันทำการสั้น) · เมกา/คริปโตใช้ 240 นาที
     # ดูจากชื่อที่ดึงได้จริง ไม่ใช่จากกลุ่ม เพราะพิมพ์เองก็ต้องได้ถูกเหมือนกัน
@@ -244,7 +247,7 @@ def build(symbol: str, market: str | None = None, full_tf: str | None = None):
         "Week": d.to_period(daily, "W-FRI"),
         "Month": d.to_period(daily, "ME"),
     }
-    return (d.build_figure(symbol.upper(), panels, height=chart_height),
+    return (d.build_figure(symbol.upper(), panels, height=chart_height, ribbon=ribbon),
             cand, not intraday.empty)
 
 
@@ -252,7 +255,7 @@ def build(symbol: str, market: str | None = None, full_tf: str | None = None):
 # หน้าเว็บ
 # ─────────────────────────────────────────────────────────────
 
-c1, c2, c3, c4, c5, c6, c7 = st.columns([3.0, 1.4, 3.0, .9, 1.1, 1.0, 1.2])
+c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([2.7, 1.3, 2.7, .9, 1.1, 1.0, 1.1, 1.2])
 
 typed = c1.text_input("ชื่อหุ้น", key="typed", label_visibility="collapsed",
                       placeholder="พิมพ์ชื่อย่อ เช่น PTT · AAPL · BTC แล้วกด Enter")
@@ -292,6 +295,15 @@ if c7.button(full_label, **FULL_BTN,
     st.session_state.fullscreen = not st.session_state.fullscreen
     st.rerun()                          # ความสูงกราฟเปลี่ยนตามโหมด ต้องวาด CSS ใหม่
 
+# ปุ่มริบบิ้น — อยู่ถัดจากปุ่ม Full
+cloud_label = "Cloud ✓" if st.session_state.cloud else "Cloud"
+if c8.button(cloud_label, **FULL_BTN,
+             help="ริบบิ้น EMA 25/75 — เขียว = ขาขึ้น · ชมพู = ขาลง "
+                  "พร้อมวงกลมตรงจุดที่ริบบิ้นเปลี่ยนสี"):
+    st.session_state.cloud = not st.session_state.cloud
+    st.rerun()          # ป้ายบนปุ่มวาดไปก่อนหน้านี้แล้ว ต้องวาดใหม่ให้ตรงสถานะ
+                        # (ข้อมูลอยู่ใน cache อยู่แล้ว รอบใหม่จึงไม่ได้ดึง Yahoo ซ้ำ)
+
 # แถวเลือกไทม์เฟรม — โผล่เฉพาะโหมดเต็มจอ
 full_tf = None
 if st.session_state.fullscreen:
@@ -303,7 +315,8 @@ symbol = st.session_state.symbol
 
 st.session_state.fetch_errors = []
 with st.spinner(f"กำลังดึงข้อมูล {symbol} ..."):
-    result = build(symbol, st.session_state.market, full_tf)
+    result = build(symbol, st.session_state.market, full_tf,
+                   ribbon=st.session_state.cloud)
 
 if result is None:
     st.error(f"ไม่พบข้อมูลของ **{symbol}**")
