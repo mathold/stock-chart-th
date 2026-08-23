@@ -237,7 +237,7 @@ def build(symbol: str, market: str | None = None, full_tf: str | None = None,
     """คืน (figure, สัญลักษณ์ที่ใช้ได้, ข้อมูลครบไหม) หรือ None ถ้าไม่มีข้อมูลเลย
 
     full_tf = None → กราฟ 4 จอเหมือนเดิม · ใส่ชื่อไทม์เฟรม → เต็มจอช่องเดียว
-    ribbon = True → ระบายริบบิ้น EMA 25/75 ทับพื้นหลัง (ปุ่ม Cloud)
+    ribbon = True → ระบายริบบิ้น EMA 10/30 ทับพื้นหลัง (ปุ่ม Cloud)
     """
     for cand in candidates_for(symbol, market):
         daily = load_daily(cand)
@@ -314,7 +314,7 @@ if c7.button(full_label, **FULL_BTN,
 # ปุ่มริบบิ้น — อยู่ถัดจากปุ่ม Full
 cloud_label = "Cloud ✓" if st.session_state.cloud else "Cloud"
 if c8.button(cloud_label, **FULL_BTN,
-             help="ริบบิ้น EMA 25/75 — เขียว = ขาขึ้น · ชมพู = ขาลง "
+             help="ริบบิ้น EMA 10/30 — เขียว = ขาขึ้น · ชมพู = ขาลง "
                   "พร้อมป้าย B/S ตรงจุดที่ริบบิ้นเปลี่ยนสี"):
     st.session_state.cloud = not st.session_state.cloud
     st.rerun()          # ป้ายบนปุ่มวาดไปก่อนหน้านี้แล้ว ต้องวาดใหม่ให้ตรงสถานะ
