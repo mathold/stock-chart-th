@@ -14,3 +14,6 @@ StockCharts/
 
 # macOS
 .DS_Store
+
+# ภาพที่เอาไว้ให้ Claude อ่าน (ไม่ต้องขึ้น git)
+images/
