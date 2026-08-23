@@ -25,6 +25,7 @@ import os
 import pandas as pd
 import streamlit as st
 
+import homily as hm
 import thai_stock_dashboard as d
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -75,6 +76,7 @@ st.session_state.setdefault("symbol", "SET")
 st.session_state.setdefault("market", None)      # None = ให้ระบบเดาตลาดเอง
 st.session_state.setdefault("fullscreen", False)  # True = โหมดไทม์เฟรมเดียวเต็มจอ
 st.session_state.setdefault("cloud", False)       # True = เปิดริบบิ้น EMA (ปุ่ม Cloud)
+st.session_state.setdefault("homily", False)      # True = ชุด BBE/DE/MCD พื้นดำ
 
 # โหมดเต็มจอมีแถวปุ่มไทม์เฟรมเพิ่มมาอีกแถว ต้องหักความสูงให้ด้วย
 _top_px = CHART_TOP_PX + (FULL_TF_ROW_PX if st.session_state.fullscreen else 0)
@@ -233,11 +235,15 @@ def one_panel(cand: str, tf: str, daily: pd.DataFrame) -> pd.DataFrame:
 
 
 def build(symbol: str, market: str | None = None, full_tf: str | None = None,
-          ribbon: bool = False):
+          ribbon: bool = False, homily: bool = False):
     """คืน (figure, สัญลักษณ์ที่ใช้ได้, ข้อมูลครบไหม) หรือ None ถ้าไม่มีข้อมูลเลย
 
     full_tf = None → กราฟ 4 จอเหมือนเดิม · ใส่ชื่อไทม์เฟรม → เต็มจอช่องเดียว
     ribbon = True → ระบายริบบิ้น EMA 10/30 ทับพื้นหลัง (ปุ่ม Cloud)
+    homily = True → เปลี่ยนไปใช้ชุด BBE / DE / MCD พื้นดำ (ปุ่ม Homily)
+
+    โหมด Homily ห่อด้วย try — ถ้าโมดูลนั้นพังด้วยเหตุใดก็ตาม ให้ถอยไปวาดกราฟ
+    ชุดเดิมแทนที่จะปล่อยให้ทั้งหน้าเป็นจอแดง (แอปบน iPad ใช้งานต่อได้เสมอ)
     """
     for cand in candidates_for(symbol, market):
         daily = load_daily(cand)
@@ -250,6 +256,13 @@ def build(symbol: str, market: str | None = None, full_tf: str | None = None,
         df = one_panel(cand, full_tf, daily)
         if df is None or df.empty:
             return (None, cand, False)
+        if homily:
+            try:
+                return (hm.build_single_figure(symbol.upper(), df, full_tf,
+                                               height=None), cand, True)
+            except Exception as e:                          # noqa: BLE001
+                st.session_state.setdefault("fetch_errors", []).append(
+                    f"โหมด Homily: {type(e).__name__} — {e}")
         return (d.build_single_figure(symbol.upper(), df, full_tf,
                                       height=None, ribbon=ribbon), cand, True)
 
@@ -263,6 +276,13 @@ def build(symbol: str, market: str | None = None, full_tf: str | None = None,
         "Week": d.to_period(daily, "W-FRI"),
         "Month": d.to_period(daily, "ME"),
     }
+    if homily:
+        try:
+            return (hm.build_figure(symbol.upper(), panels, height=None),
+                    cand, not intraday.empty)
+        except Exception as e:                              # noqa: BLE001
+            st.session_state.setdefault("fetch_errors", []).append(
+                f"โหมด Homily: {type(e).__name__} — {e}")
     return (d.build_figure(symbol.upper(), panels, height=None, ribbon=ribbon),
             cand, not intraday.empty)
 
@@ -271,7 +291,8 @@ def build(symbol: str, market: str | None = None, full_tf: str | None = None,
 # หน้าเว็บ
 # ─────────────────────────────────────────────────────────────
 
-c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([2.7, 1.3, 2.7, .9, 1.1, 1.0, 1.1, 1.2])
+c1, c2, c3, c4, c5, c6, c7, c8, c9 = st.columns(
+    [2.4, 1.2, 2.4, .85, 1.05, 1.0, 1.0, 1.1, 1.3])
 
 typed = c1.text_input("ชื่อหุ้น", key="typed", label_visibility="collapsed",
                       placeholder="พิมพ์ชื่อย่อ เช่น PTT · AAPL · BTC แล้วกด Enter")
@@ -313,12 +334,21 @@ if c7.button(full_label, **FULL_BTN,
 
 # ปุ่มริบบิ้น — อยู่ถัดจากปุ่ม Full
 cloud_label = "Cloud ✓" if st.session_state.cloud else "Cloud"
-if c8.button(cloud_label, **FULL_BTN,
+if c8.button(cloud_label, **FULL_BTN, disabled=st.session_state.homily,
              help="ริบบิ้น EMA 10/30 — เขียว = ขาขึ้น · ชมพู = ขาลง "
                   "พร้อมป้าย B/S ตรงจุดที่ริบบิ้นเปลี่ยนสี"):
     st.session_state.cloud = not st.session_state.cloud
     st.rerun()          # ป้ายบนปุ่มวาดไปก่อนหน้านี้แล้ว ต้องวาดใหม่ให้ตรงสถานะ
                         # (ข้อมูลอยู่ใน cache อยู่แล้ว รอบใหม่จึงไม่ได้ดึง Yahoo ซ้ำ)
+
+# ปุ่มโหมด Homily — ชุด BBE / DE / MCD พื้นดำ (ปิดปุ่ม Cloud ไปเลยตอนเปิด
+# เพราะโหมดนี้มีริบบิ้น BBE ของตัวเองอยู่แล้ว กดคู่กันจะงงว่าเห็นริบบิ้นอันไหน)
+homily_label = "Homily ✓" if st.session_state.homily else "Homily"
+if c9.button(homily_label, **FULL_BTN,
+             help="BBE ริบบิ้นแดง/ฟ้า + เลข 1-9 · DE เงินทุนเข้า-ออก · "
+                  "MCD กระจายต้นทุน — เลียนแบบ Homily Chart จากข้อมูล Yahoo"):
+    st.session_state.homily = not st.session_state.homily
+    st.rerun()
 
 # แถวเลือกไทม์เฟรม — โผล่เฉพาะโหมดเต็มจอ
 full_tf = None
@@ -332,7 +362,8 @@ symbol = st.session_state.symbol
 st.session_state.fetch_errors = []
 with st.spinner(f"กำลังดึงข้อมูล {symbol} ..."):
     result = build(symbol, st.session_state.market, full_tf,
-                   ribbon=st.session_state.cloud)
+                   ribbon=st.session_state.cloud,
+                   homily=st.session_state.homily)
 
 if result is None:
     st.error(f"ไม่พบข้อมูลของ **{symbol}**")
@@ -360,6 +391,15 @@ st.plotly_chart(fig, **FULL_CHART, config={
 note = f"สัญลักษณ์: `{used}` · ณ {d.now_bkk():%d/%m/%Y %H:%M} น. (เวลาไทย)"
 if not has_data and not full_tf:
     note += " · ไม่มี intraday ช่องแรกจึงว่าง"
+if st.session_state.homily:
+    # โหมดนี้ถอยไปกราฟเดิมเงียบ ๆ ได้ถ้าคำนวณพัง — ต้องบอกให้รู้ว่าที่เห็นไม่ใช่ Homily
+    if any(e.startswith("โหมด Homily") for e in st.session_state.fetch_errors):
+        st.warning("โหมด Homily คำนวณไม่ผ่านกับตัวนี้ — แสดงกราฟชุดเดิมแทน")
+        st.caption(" · ".join(st.session_state.fetch_errors))
+    else:
+        note += (" · BBE/DE/MCD เป็นการ**ทำเลียนแบบ**จากข้อมูล Yahoo (OHLCV) "
+                 "สูตรจริงของ Homily ไม่เปิดเผย ตัวเลขจึงไม่ตรงกัน "
+                 "โดยเฉพาะ MCD ที่แยก กำไร/ลอย/ติดดอย ไม่ใช่ รายใหญ่/รายย่อย")
 note += (" · ราคาจาก Yahoo Finance เป็นข้อมูลปิดตลาด/ดีเลย์ ไม่ใช่เรียลไทม์ "
          "ใช้ประกอบการศึกษา ตรวจกับโบรกเกอร์ก่อนซื้อขาย")
 st.caption(note)
