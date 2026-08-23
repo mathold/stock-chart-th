@@ -1,14 +1,16 @@
 """
-โหมด Homily — กราฟ 3 แถวเลียนแบบ Homily Chart
-=============================================
-แถวบน  BBE (Bull & Bear Expert)  ริบบิ้นแดง = ขาขึ้น · ริบบิ้นฟ้า = ขาลง
+โหมด My Signal — กราฟ 3 แถว
+===========================
+แถวบน  BBE (Bull & Bear Expert)  ริบบิ้นเขียว = ขาขึ้น · ริบบิ้นแดง = ขาลง
         + สีแท่งเทียนแบบ Signal Aditor + ตัวเลข Pattern 49 (นับ 1-9)
-แถวกลาง DE  (Deviation Expert)    แท่งแดง = เงินทุนไหลเข้า · แท่งเขียว = ไหลออก
+แถวกลาง DE  (Deviation Expert)    แท่งเขียว = เงินทุนไหลเข้า · แท่งแดง = ไหลออก
 แถวล่าง MCD (Multicolor Dragon)   แท่ง 100%  แดง = กำไร/รายใหญ่ · เหลือง = ลอย/รายย่อย
                                              เขียว = ติดดอย   + เส้น MA10 สามเส้น
 
 ⚠️ สูตรจริงของ Homily เป็นความลับทางการค้า ไม่เคยเปิดเผย
    ไฟล์นี้ "ทำเลียนแบบ" จากพฤติกรรมที่เห็นในคู่มือ + ภาพตัวอย่าง
+   สีถูกสลับเป็นแบบสากล (เขียว = ขึ้น/เงินเข้า · แดง = ลง/เงินออก)
+   ซึ่งตรงข้ามกับ Homily ตัวจริงที่ใช้แบบจีน (แดง = ขึ้น)
    โดยใช้เฉพาะข้อมูลที่ Yahoo ให้ (OHLCV) เท่านั้น ตัวเลขจึงไม่ตรงกับของ Homily
    โดยเฉพาะ MCD ที่ของจริงแยก "รายใหญ่/รายย่อย" จากขนาดคำสั่งซื้อขายรายไม้
    ซึ่งเราไม่มี — ที่นี่จึงแยกเป็น "กำไร/ลอย/ติดดอย" จากราคาทุนแทน
@@ -34,8 +36,8 @@ BARS_FULL = 320                 # โหมดเต็มจอ                
 
 # ── BBE ── ริบบิ้นสองเส้น EMA ซ้อนสองชั้น (double EMA) ให้เส้นลื่นและริบบิ้นหนา
 BBE_FAST, BBE_SLOW = 13, 34
-BBE_UP = "rgba(200,0,0,0.95)"       # แดง = ขาขึ้น
-BBE_DOWN = "rgba(0,224,255,0.90)"   # ฟ้า = ขาลง
+BBE_UP = "rgba(0,190,80,0.92)"      # เขียวสด = ขาขึ้น
+BBE_DOWN = "rgba(214,20,20,0.92)"   # แดง     = ขาลง
 BBE_EDGE = "#FFD24A"                # เส้นขอบบางสีเหลืองแบบในภาพตัวอย่าง
 
 # ── สีแท่งเทียน (Signal Aditor) ──
@@ -51,8 +53,8 @@ P49_DOWN_COLOR = "#00E36A"      # เขียว = นับฝั่งลง 
 
 # ── DE ── ผลต่างของราคาถ่วงน้ำหนักด้วยวอลุ่ม เร็ว-ช้า
 DE_FAST, DE_SLOW, DE_SMOOTH = 13, 55, 5
-DE_IN = "#FF2A2A"               # แดง   = เงินทุนไหลเข้า (ค่ากำลังขึ้น)
-DE_OUT = "#00E000"              # เขียว = เงินทุนไหลออก  (ค่ากำลังลง)
+DE_IN = "#00E000"               # เขียว = เงินทุนไหลเข้า (ค่ากำลังขึ้น)
+DE_OUT = "#FF2A2A"              # แดง   = เงินทุนไหลออก  (ค่ากำลังลง)
 DE_ZERO = "#E8D200"             # เส้น 0 สีเหลือง
 
 # ── MCD ── กระจายต้นทุน (chip distribution)
@@ -67,7 +69,7 @@ MCD_MA_PROFIT = "#B060FF"       # ม่วง  ตามแท่งแดง
 MCD_MA_FLOAT = "#FF63C8"        # ชมพู  ตามแท่งเหลือง
 MCD_MA_TRAP = "#00C8FF"         # ฟ้า   ตามแท่งเขียว
 
-# ── ธีมดำแบบ Homily ──
+# ── ธีมดำ ──
 BG = "#000000"
 GRID = "#333333"
 TXT = "#FFFFFF"
@@ -84,7 +86,7 @@ def _dema(s: pd.Series, n: int) -> pd.Series:
 
 
 def bbe(close: pd.Series) -> tuple[pd.Series, pd.Series]:
-    """ริบบิ้น BBE — คืน (เส้นเร็ว, เส้นช้า) · เร็วอยู่บน = ขาขึ้น (แดง)"""
+    """ริบบิ้น BBE — คืน (เส้นเร็ว, เส้นช้า) · เร็วอยู่บน = ขาขึ้น (เขียว)"""
     return _dema(close, BBE_FAST), _dema(close, BBE_SLOW)
 
 
@@ -251,10 +253,10 @@ def mcd(df: pd.DataFrame) -> pd.DataFrame:
 def signal_colors(bull: pd.Series, de_line: pd.Series) -> pd.Series:
     """สีแท่งเทียนแบบ Signal Aditor
 
-    แดง   ซื้อ      = ริบบิ้นกลับเป็นแดง หรือ DE ตัดขึ้นเหนือ 0 ตอนริบบิ้นแดง
-    เหลือง ขาย      = ริบบิ้นกลับเป็นฟ้า หรือ DE ตัดลงใต้ 0 ตอนริบบิ้นแดง
-    น้ำเงิน ถือหุ้น   = ริบบิ้นแดงช่วงอื่น
-    ฟ้า    ถือเงินสด = ริบบิ้นฟ้าช่วงอื่น
+    แดง   ซื้อ      = ริบบิ้นกลับเป็นเขียว หรือ DE ตัดขึ้นเหนือ 0 ตอนริบบิ้นเขียว
+    เหลือง ขาย      = ริบบิ้นกลับเป็นแดง  หรือ DE ตัดลงใต้ 0 ตอนริบบิ้นเขียว
+    น้ำเงิน ถือหุ้น   = ริบบิ้นเขียวช่วงอื่น
+    ฟ้า    ถือเงินสด = ริบบิ้นแดงช่วงอื่น
     """
     # .astype(bool) สำคัญมาก — shift() ทำให้ Series กลายเป็น object dtype แล้ว
     # เครื่องหมาย ~ จะไปทำ bitwise not ของ Python bool (~True = -2 ซึ่งเป็นจริง)
@@ -303,7 +305,7 @@ def _tag(fig, value, color: str, row: int, col: int, digits: int = 2):
 
 def _draw_ribbon(fig, fast: pd.Series, slow: pd.Series, x: list[str],
                  row: int, col: int) -> bool | None:
-    """ระบายพื้นที่ระหว่างสองเส้น แดงตอนเร็วอยู่บน ฟ้าตอนเร็วอยู่ล่าง
+    """ระบายพื้นที่ระหว่างสองเส้น เขียวตอนเร็วอยู่บน แดงตอนเร็วอยู่ล่าง
 
     ต้องวาดก่อนแท่งเทียนเสมอ ไม่งั้นพื้นสีจะทับแท่ง
     """
@@ -417,8 +419,8 @@ def draw_panel(fig, src: pd.DataFrame, tf: str, base_row: int, col: int,
     last = df.iloc[-1]
     prev_close = df["Close"].iloc[-2] if len(df) > 1 else last["Close"]
     pct = (last["Close"] / prev_close - 1) * 100 if prev_close else 0.0
-    trend_color = "#FF4040" if bull else "#00D5F5"
-    trend_word = "ริบบิ้นแดง = ขาขึ้น" if bull else "ริบบิ้นฟ้า = ขาลง"
+    trend_color = "#00D060" if bull else "#FF4040"
+    trend_word = "ริบบิ้นเขียว = ขาขึ้น" if bull else "ริบบิ้นแดง = ขาลง"
     cnt = (f'  <span style="color:{P49_UP_COLOR}">นับขึ้น {int(last["_P49U"])}</span>'
            if last["_P49U"] else
            (f'  <span style="color:{P49_DOWN_COLOR}">นับลง {int(last["_P49D"])}</span>'
@@ -503,7 +505,7 @@ def _style(fig: go.Figure, ticker: str, height: int | None,
         fig.update_yaxes(range=[0, 100], dtick=50, row=row, col=col)
 
     fig.update_layout(
-        title=dict(text=f"{ticker}  ·  Homily  ·  {d.now_bkk():%d/%m/%Y %H:%M}",
+        title=dict(text=f"{ticker}  ·  My Signal  ·  {d.now_bkk():%d/%m/%Y %H:%M}",
                    x=0.01, font=dict(size=15, color=TXT)),
         height=height, autosize=True,
         paper_bgcolor=BG, plot_bgcolor=BG,
