@@ -3,6 +3,7 @@
 ===========================
 แถวบน  BBE (Bull & Bear Expert)  ริบบิ้นเขียว = ขาขึ้น · ริบบิ้นแดง = ขาลง
         + สีแท่งเทียน เหลือง=ซื้อ แดง=ขาย เขียว=ถือหุ้น ชมพู=ถือเงินสด
+        + ป้าย Buy ใต้แท่งเหลือง / Sell เหนือแท่งแดง
         + ตัวเลข Pattern 49 (นับ 1-9) ฟ้า=นับขึ้น · ส้ม=นับลง
 แถวกลาง DE  (Deviation Expert)    แท่งเขียว = เงินทุนไหลเข้า · แท่งแดง = ไหลออก
 แถวล่าง MCD (Multicolor Dragon)   แท่ง 100%  เขียว = กำไร/รายใหญ่ · เหลือง = ลอย/รายย่อย
@@ -51,6 +52,12 @@ SIG_BUY = "#FFE800"             # เหลือง     = สัญญาณซ
 SIG_SELL = "#FF3B3B"            # แดงสว่าง   = สัญญาณขาย
 SIG_HOLD = "#00FF7F"            # เขียวสว่าง = ถือหุ้นต่อ
 SIG_CASH = "#FF7BD5"            # ชมพู       = ถือเงินสด
+
+# ป้าย Buy / Sell ที่แปะบนแท่งสัญญาณ
+SIG_MARK_SIZE = 10              # ขนาดตัวอักษร
+SIG_MARK_PAD = 0.055            # ระยะห่างจากแท่ง คิดเป็นสัดส่วนของช่วงราคาที่เห็นในจอ
+                                # ใช้สัดส่วนของช่วงราคา ไม่ใช่ % ของราคา เพราะหุ้น 2 บาท
+                                # กับหุ้น 250 บาท ต้องได้ระยะห่างที่ตาเห็นเท่ากัน
 
 # ── Pattern 49 ── นับแท่งเทียบกับ 4 แท่งก่อนหน้า ครบ 9 แล้วเริ่มใหม่
 P49_LOOKBACK, P49_TARGET = 4, 9
@@ -343,6 +350,34 @@ def _draw_ribbon(fig, fast: pd.Series, slow: pd.Series, x: list[str],
     return bool(bull[-1])
 
 
+def _draw_signal_marks(fig, df: pd.DataFrame, x: list[str], row: int, col: int):
+    """ป้าย Buy / Sell บนแท่งที่มีสัญญาณ
+
+    Buy อยู่ใต้แท่งเหลือง · Sell อยู่เหนือแท่งแดง — วางไกลกว่าเลข Pattern 49
+    เล็กน้อยเพื่อไม่ให้ตัวหนังสือทับกัน
+    """
+    span = float(df["High"].max() - df["Low"].min())
+    if not np.isfinite(span) or span <= 0:
+        span = float(df["Close"].iloc[-1]) * 0.1 if len(df) else 1.0
+    pad = span * SIG_MARK_PAD
+
+    for sig_color, label, price_key, sign, place in (
+            (SIG_BUY, "Buy", "Low", -1, "bottom center"),
+            (SIG_SELL, "Sell", "High", +1, "top center")):
+        m = (df["_SIG"] == sig_color).to_numpy()
+        if not m.any():
+            continue
+        idx = np.flatnonzero(m)
+        fig.add_trace(go.Scatter(
+            x=[x[i] for i in idx],
+            y=df[price_key].to_numpy()[idx] + sign * pad,
+            mode="text", text=[f"<b>{label}</b>"] * len(idx),
+            textposition=place,
+            textfont=dict(size=SIG_MARK_SIZE, color=sig_color),
+            showlegend=False, hoverinfo="skip",
+        ), row=row, col=col)
+
+
 def _draw_p49(fig, df: pd.DataFrame, x: list[str], row: int, col: int):
     """ตัวเลข 1-9 — ฝั่งขึ้นอยู่เหนือแท่ง (ชมพู) · ฝั่งลงอยู่ใต้แท่ง (เขียว)"""
     for key, color, price_key, pad, place in (
@@ -397,6 +432,7 @@ def draw_panel(fig, src: pd.DataFrame, tf: str, base_row: int, col: int,
         ), row=base_row, col=col)
 
     _draw_p49(fig, df, x, base_row, col)
+    _draw_signal_marks(fig, df, x, base_row, col)
 
     # ── แถว 2: DE ─────────────────────────────────────────────
     for up, color in ((True, DE_IN), (False, DE_OUT)):
