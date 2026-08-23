@@ -52,10 +52,19 @@ INDEX_TARGETS = {
 st.set_page_config(page_title="กราฟหุ้นไทย", page_icon="📈",
                    layout="wide", initial_sidebar_state="collapsed")
 
-# ความสูงกราฟ (px) — ตั้งให้ครบ 4 ช่องพอดีจอเดียวบน iPad Air 11" แนวนอน
-# จอ 2360x1640 px @2x = viewport 1180x820 pt · หักแถวควบคุมบน + คำอธิบายล่าง ~70 px
-# (Plotly ต้องได้ตัวเลขชัด ๆ ถ้าปล่อย autosize มันจะตกกลับไปใช้ default 450 px)
-CHART_HEIGHT_PX = 750
+# ความสูงกราฟ — ยืดตามความสูงจอจริงของเครื่องที่เปิด (iPad / มือถือ / จอคอม)
+# ทำด้วย CSS ล้วน: ตั้งความสูงให้ "กล่องที่ครอบกราฟ" แล้วปล่อยให้ Plotly (responsive)
+# วัดกล่องเอง — จึงหมุนจอ/ย่อขยายหน้าต่างแล้วปรับตามทันทีโดยไม่ต้อง rerun
+#
+# กับดักที่เจอตอนทำ (อย่ารื้อออก):
+#   • ต้องส่ง height=None เข้า build_figure ด้วย ถ้าใส่ตัวเลข Plotly จะล็อกความสูงไว้
+#     แล้ว responsive ไม่ทำงาน
+#   • .stElementContainer ของ Streamlit ตั้ง flex: 0 0 450px ไว้ ถ้าแก้แต่ height
+#     กล่องจะยัง 450 px แล้วกราฟโดนตัดครึ่ง — ต้องทับ flex-basis ด้วย
+#   • ใช้ svh (ไม่ใช่ vh) เพราะ Safari บนมือถือนับแถบที่อยู่/แถบล่างต่างกัน
+CHART_TOP_PX = 70                       # แถวควบคุมบน + คำอธิบายล่าง
+CHART_MIN_PX = 380                      # จอเตี้ยมากก็ไม่ให้กราฟแบนกว่านี้ (ยอมให้เลื่อน)
+CHART_MAX_PX = 1600
 
 # โหมดเต็มจอ: ไทม์เฟรมเดียวเต็มหน้า — เสียความสูงให้แถวเลือกไทม์เฟรมอีกแถว
 FULL_TFS = ["60m", "120m", "Day", "Week", "Month", "Quarter", "Year"]
@@ -67,8 +76,9 @@ st.session_state.setdefault("market", None)      # None = ให้ระบบ�
 st.session_state.setdefault("fullscreen", False)  # True = โหมดไทม์เฟรมเดียวเต็มจอ
 st.session_state.setdefault("cloud", False)       # True = เปิดริบบิ้น EMA (ปุ่ม Cloud)
 
-chart_height = (CHART_HEIGHT_PX - FULL_TF_ROW_PX
-                if st.session_state.fullscreen else CHART_HEIGHT_PX)
+# โหมดเต็มจอมีแถวปุ่มไทม์เฟรมเพิ่มมาอีกแถว ต้องหักความสูงให้ด้วย
+_top_px = CHART_TOP_PX + (FULL_TF_ROW_PX if st.session_state.fullscreen else 0)
+CHART_H = f"clamp({CHART_MIN_PX}px, calc(100svh - {_top_px}px), {CHART_MAX_PX}px)"
 
 st.markdown(f"""
 <style>
@@ -76,8 +86,14 @@ st.markdown(f"""
   .block-container {{ padding: .35rem .6rem .1rem !important; max-width: 100% !important; }}
   [data-testid="stVerticalBlock"] {{ gap: .3rem !important; }}
   [data-testid="stCaptionContainer"] p {{ font-size: .68rem; line-height: 1.2; margin: 0; }}
+  /* กล่องของ Streamlit ที่ครอบกราฟ — ต้องทับทั้ง height และ flex-basis */
+  .stElementContainer:has([data-testid="stPlotlyChart"]) {{
+      height: {CHART_H} !important;
+      flex: 0 0 {CHART_H} !important;
+      max-height: none !important;
+  }}
   [data-testid="stPlotlyChart"], [data-testid="stPlotlyChart"] > div {{
-      height: {chart_height}px !important;
+      height: {CHART_H} !important;
   }}
   /* ดรอปดาวน์ยาวขึ้น — ของเดิมโชว์ได้ 7 บรรทัดพอดี กลุ่มที่ 8 (Bond) เลยตกขอบ
      จนดูเหมือนไม่มี ต้องเลื่อนในกล่องเล็ก ๆ ซึ่งบน iPad ทำยาก */
@@ -235,7 +251,7 @@ def build(symbol: str, market: str | None = None, full_tf: str | None = None,
         if df is None or df.empty:
             return (None, cand, False)
         return (d.build_single_figure(symbol.upper(), df, full_tf,
-                                      height=chart_height, ribbon=ribbon), cand, True)
+                                      height=None, ribbon=ribbon), cand, True)
 
     # หุ้นไทยใช้แท่ง 120 นาที (วันทำการสั้น) · เมกา/คริปโตใช้ 240 นาที
     # ดูจากชื่อที่ดึงได้จริง ไม่ใช่จากกลุ่ม เพราะพิมพ์เองก็ต้องได้ถูกเหมือนกัน
@@ -247,7 +263,7 @@ def build(symbol: str, market: str | None = None, full_tf: str | None = None,
         "Week": d.to_period(daily, "W-FRI"),
         "Month": d.to_period(daily, "ME"),
     }
-    return (d.build_figure(symbol.upper(), panels, height=chart_height, ribbon=ribbon),
+    return (d.build_figure(symbol.upper(), panels, height=None, ribbon=ribbon),
             cand, not intraday.empty)
 
 
@@ -299,7 +315,7 @@ if c7.button(full_label, **FULL_BTN,
 cloud_label = "Cloud ✓" if st.session_state.cloud else "Cloud"
 if c8.button(cloud_label, **FULL_BTN,
              help="ริบบิ้น EMA 25/75 — เขียว = ขาขึ้น · ชมพู = ขาลง "
-                  "พร้อมวงกลมตรงจุดที่ริบบิ้นเปลี่ยนสี"):
+                  "พร้อมป้าย B/S ตรงจุดที่ริบบิ้นเปลี่ยนสี"):
     st.session_state.cloud = not st.session_state.cloud
     st.rerun()          # ป้ายบนปุ่มวาดไปก่อนหน้านี้แล้ว ต้องวาดใหม่ให้ตรงสถานะ
                         # (ข้อมูลอยู่ใน cache อยู่แล้ว รอบใหม่จึงไม่ได้ดึง Yahoo ซ้ำ)
