@@ -4,6 +4,7 @@
 แถวบน  BBE (Bull & Bear Expert)  ริบบิ้นเขียว = ขาขึ้น · ริบบิ้นแดง = ขาลง
         + สีแท่งเทียน เหลือง=ซื้อ แดง=ขาย เขียว=ถือหุ้น ชมพู=ถือเงินสด
         + ป้าย Buy ใต้แท่งเหลือง / Sell เหนือแท่งแดง
+        + แถบสถานะกึ่งกลางด้านบน (ซื้อเต็มไม้ / ครึ่งไม้ / ถือต่อ / ลดไม้ / ออก / อยู่เฉย)
         + ตัวเลข Pattern 49 (นับ 1-9) ฟ้า=นับขึ้น · ส้ม=นับลง
 แถวกลาง DE  (Deviation Expert)    แท่งเขียว = เงินทุนไหลเข้า · แท่งแดง = ไหลออก
 แถวล่าง MCD (Multicolor Dragon)   แท่ง 100%  เขียว = กำไร/รายใหญ่ · เหลือง = ลอย/รายย่อย
@@ -52,6 +53,20 @@ SIG_BUY = "#FFE800"             # เหลือง     = สัญญาณซ
 SIG_SELL = "#FF3B3B"            # แดงสว่าง   = สัญญาณขาย
 SIG_HOLD = "#00FF7F"            # เขียวสว่าง = ถือหุ้นต่อ
 SIG_CASH = "#FF7BD5"            # ชมพู       = ถือเงินสด
+
+# ── แถบสถานะกึ่งกลางด้านบนของช่องราคา ──
+# สรุปว่า "ตอนนี้ควรทำอะไร" จากเงื่อนไขรวมของ BBE + DE + MCD
+# ชื่อสถานะตรงกับตารางสถานการณ์ในคู่มือ (คู่มือ My Signal หน้า 5)
+STATUS_STYLE = {              # สถานะ : (สีพื้น, สีตัวอักษร)
+    "ซื้อเต็มไม้":  ("#00FF7F", "#0B0B0D"),
+    "ซื้อครึ่งไม้": ("#FFE800", "#0B0B0D"),
+    "ถือต่อ":       ("#1E7F4A", "#FFFFFF"),
+    "ลดไม้":        ("#FF9A2E", "#0B0B0D"),
+    "ออก":          ("#FF3B3B", "#FFFFFF"),
+    "อยู่เฉย":      ("#FF7BD5", "#0B0B0D"),
+}
+STATUS_SIZE = 13              # ขนาดตัวอักษรของสถานะ
+STATUS_WHY_SIZE = 9           # ขนาดข้อความเหตุผลบรรทัดล่าง
 
 # ป้าย Buy / Sell ที่แปะบนแท่งสัญญาณ
 SIG_MARK_SIZE = 10              # ขนาดตัวอักษร
@@ -293,6 +308,67 @@ def signal_colors(bull: pd.Series, de_line: pd.Series) -> pd.Series:
     return out
 
 
+def status(df: pd.DataFrame, ded: pd.DataFrame,
+           mcdd: pd.DataFrame) -> tuple[str, str]:
+    """สรุปว่าแท่งล่าสุดควรทำอะไร — คืน (สถานะ, เหตุผลสั้น ๆ)
+
+    ไล่เงื่อนไขจากตัวที่เด็ดขาดที่สุดลงมา ตรงกับตารางสถานการณ์ในคู่มือ:
+      ออก        สัญญาณขายมาแล้ว (ริบบิ้นพลิกแดง หรือ DE ตัดลงใต้ 0)
+      อยู่เฉย    ริบบิ้นแดง ไม่มีอะไรให้ทำ
+      ซื้อเต็มไม้ สัญญาณซื้อ + DE เขียวเหนือ 0 + MCD ฝั่งกำไรกำลังขยาย
+      ซื้อครึ่งไม้ สัญญาณซื้อ แต่ตัวยืนยันยังไม่ครบ
+      ลดไม้      ริบบิ้นยังเขียวแต่แรงเริ่มหมด (ริบบิ้นบีบ / DE ถอย / นับครบ 9)
+      ถือต่อ     เขียวราบรื่น ไม่มีอะไรเปลี่ยน
+    """
+    if df.empty or ded.empty or mcdd.empty:
+        return "อยู่เฉย", "ไม่มีข้อมูล"
+
+    last = df.iloc[-1]
+    bull = bool(last["_F"] >= last["_S"])
+    sig = last["_SIG"]
+    de_val = float(ded["Close"].iloc[-1])
+    de_up = bool(ded["Up"].iloc[-1])
+
+    if sig == SIG_SELL:
+        return "ออก", "สัญญาณขาย"
+    if not bull:
+        return "อยู่เฉย", "ริบบิ้นแดง"
+
+    # ── ริบบิ้นเขียวแล้ว ──
+    p_now = float(mcdd["P"].iloc[-1])
+    p_ma = float(mcdd["PMA"].iloc[-1])
+    p_expand = p_now > p_ma                      # ฝั่งกำไรโตกว่าค่าเฉลี่ยตัวเอง
+
+    if sig == SIG_BUY:
+        if de_val > 0 and de_up and p_expand:
+            return "ซื้อเต็มไม้", "ครบทั้ง BBE + DE + MCD"
+        missing = []
+        if de_val <= 0:
+            missing.append("DE ยังใต้ 0")
+        elif not de_up:
+            missing.append("DE ยังไม่เขียว")
+        if not p_expand:
+            missing.append("MCD ยังไม่ขยาย")
+        return "ซื้อครึ่งไม้", " · ".join(missing) or "ตัวยืนยันยังไม่ครบ"
+
+    # ── ถือหุ้นอยู่ เช็กว่าแรงเริ่มหมดหรือยัง ──
+    # เกณฑ์ต้องเข้มพอ ไม่งั้น "ลดไม้" จะขึ้นเกือบทุกแท่ง — ริบบิ้นกับ DE
+    # แกว่งขึ้นลงรายแท่งเป็นเรื่องปกติ ต้องดูว่าถอยต่อเนื่องจริงหรือเปล่า
+    width = (df["_F"] - df["_S"]).abs()
+    narrowing = (len(width) >= 6
+                 and float(width.iloc[-1]) < float(width.iloc[-6]) * 0.85)
+    de_fading = de_val > 0 and not ded["Up"].iloc[-3:].any()   # ถอยติดกัน 3 แท่ง
+    counted_out = int(last["_P49U"]) >= P49_TARGET
+
+    if de_fading:
+        return "ลดไม้", "DE ถอยลงหาเส้น 0"
+    if counted_out:
+        return "ลดไม้", f"นับขึ้นครบ {P49_TARGET} แล้ว"
+    if narrowing:
+        return "ลดไม้", "ริบบิ้นเริ่มบีบ"
+    return "ถือต่อ", "ยังไม่มีอะไรเปลี่ยน"
+
+
 # ─────────────────────────────────────────────────────────────
 # วาดกราฟ
 # ─────────────────────────────────────────────────────────────
@@ -348,6 +424,20 @@ def _draw_ribbon(fig, fast: pd.Series, slow: pd.Series, x: list[str],
                                  showlegend=False, hoverinfo="skip"),
                       row=row, col=col)
     return bool(bull[-1])
+
+
+def _draw_status(fig, label: str, why: str, row: int, col: int):
+    """แถบสถานะกึ่งกลางด้านบนของช่องราคา"""
+    bg, fg = STATUS_STYLE.get(label, ("#888888", "#FFFFFF"))
+    fig.add_annotation(
+        xref="x domain", yref="y domain", x=0.5, y=1.0,
+        xanchor="center", yanchor="top", align="center",
+        text=(f'<b>{label}</b>'
+              f'<br><span style="font-size:{STATUS_WHY_SIZE}px">{why}</span>'),
+        showarrow=False, font=dict(size=STATUS_SIZE, color=fg),
+        bgcolor=bg, borderpad=4, opacity=0.95,
+        row=row, col=col,
+    )
 
 
 def _draw_signal_marks(fig, df: pd.DataFrame, x: list[str], row: int, col: int):
@@ -483,6 +573,10 @@ def draw_panel(fig, src: pd.DataFrame, tf: str, base_row: int, col: int,
     de_word = "เงินทุนไหลเข้า" if bool(ded["Up"].iloc[-1]) else "เงินทุนไหลออก"
     _readout(fig, f'<b>DE</b> <span style="color:{de_color}">{d.fmt(de_last, 3)}  '
                   f'{de_word}</span>', base_row + 1, col, size=8.5)
+
+    # แถบสถานะต้องวาดท้ายสุด — annotation ที่มาทีหลังอยู่บนสุด ถ้าวาดก่อน
+    # กล่องดำของ readout มุมซ้ายบนจะทับจนอ่านไม่ออกในโหมด 4 จอ
+    _draw_status(fig, *status(df, ded, mcdd), base_row, col)
 
     m = mcdd.iloc[-1]
     _readout(fig, f'<b>MCD</b> '
