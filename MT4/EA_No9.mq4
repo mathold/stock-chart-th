@@ -26,7 +26,7 @@
 //|      ผลในอดีตไม่รับประกันอนาคต · ไฟล์นี้ไม่ใช่คำแนะนำการลงทุน ***    |
 //+------------------------------------------------------------------+
 #property copyright "Mathold"
-#property version   "1.30"
+#property version   "1.40"
 #property strict
 
 //====================== อินพุต =====================================
@@ -70,8 +70,17 @@ input int    FridayCloseHour   = 21;     // Friday close hour (server time)
 input bool   NoNewAfterFriday  = true;   // No new entry after that hour
 input double MaxSpreadPips     = 0;      // Skip entry above this spread (0 = off)
 
+// ── Telegram ── รายงานทุกครั้งที่เปิด/ปิดออเดอร์จริง
+//    ต้องเปิด Tools > Options > Expert Advisors > Allow WebRequest for listed URL
+//    แล้วเพิ่ม  https://api.telegram.org  ก่อน ไม่งั้นส่งไม่ออก (error 4060)
+input string __s7__            = "--- Telegram ---";
+input bool   UseTelegram       = false;  // Report trades to Telegram
+input string BotToken          = "";     // Bot token from @BotFather
+input string ChatId            = "";     // Your chat id from @userinfobot
+input bool   SendTestOnStart   = true;   // Send a test message when attached
+
 // ── อื่น ๆ ──
-input string __s7__            = "--- Misc ---";
+input string __s8__            = "--- Misc ---";
 input int    MagicNumber       = 90009;  // Magic number (must be unique)
 input int    SlippagePips      = 3;      // Slippage in pips
 input string TradeComment      = "No9";  // Order comment
@@ -141,6 +150,12 @@ int OnInit()
       return(INIT_PARAMETERS_INCORRECT);
      }
 
+   if(UseTelegram && (StringLen(BotToken) < 20 || StringLen(ChatId) < 3))
+     {
+      Print("Telegram is on but BotToken / ChatId is empty - fill them in the Inputs tab");
+      return(INIT_PARAMETERS_INCORRECT);
+     }
+
    Print(StringFormat("EA No9 started %s | buy at count %d | close at count %d | %.2f lot | magic %d",
                       Symbol(), EntryCount, ExitCount, Lots, MagicNumber));
    Print(StringFormat("   ribbon filter %s | close on red %s | RSI exit %s",
@@ -148,6 +163,15 @@ int OnInit()
                       (CloseOnRibbonRed  ? "ON" : "off"),
                       (UseRsiExit ? StringFormat("ON (RSI%d >= %.1f)",
                                                  RsiPeriod, RsiExitLevel) : "off")));
+
+   if(UseTelegram && SendTestOnStart)
+     {
+      if(TelegramSend(StringFormat("EA No9 attached to %s %s - lot %.2f, magic %d",
+                                   Symbol(), TFText(Period()), Lots, MagicNumber)))
+         Print("Telegram test message sent OK");
+      else
+         Print("Telegram test message FAILED - see the message above for the reason");
+     }
    return(INIT_SUCCEEDED);
   }
 
@@ -244,7 +268,7 @@ bool Recalc()
    if(TradeOnBarClose && g_calcBar == Time[0] && g_size > 0)
       return(true);
 
-   int warm  = MathMax(CountLookback, BbeSlow * 4) + 10;
+   int warm  = (int)MathMax(CountLookback, BbeSlow * 4) + 10;
    int total = CalcBars + warm;
    if(total > Bars - 2)
       total = Bars - 2;
@@ -339,10 +363,14 @@ void OpenBuy(const int count)
                              MagicNumber, 0, clrGreen);
       if(ticket > 0)
         {
-         Print(StringFormat("OPEN BUY %.2f lot at %s | count %d | SL %s | TP %s",
-                            Lots, DoubleToString(price, Digits), count,
-                            (sl > 0 ? DoubleToString(sl, Digits) : "-"),
-                            (tp > 0 ? DoubleToString(tp, Digits) : "-")));
+         string logline = StringFormat("OPEN BUY %.2f lot at %s | count %d | SL %s | TP %s",
+                                      Lots, DoubleToString(price, Digits), count,
+                                      (sl > 0 ? DoubleToString(sl, Digits) : "-"),
+                                      (tp > 0 ? DoubleToString(tp, Digits) : "-"));
+         Print(logline);
+         if(UseTelegram)
+            TelegramSend(StringFormat("EA No9 %s %s\n%s",
+                                      Symbol(), TFText(Period()), logline));
          return;
         }
 
@@ -383,14 +411,36 @@ void CloseOwnTrade(const string why)
       if(!OrderSelect(ticket, SELECT_BY_TICKET))
          return;
 
+      // อ่านค่าไว้ก่อนปิดเป็นตัวสำรอง เผื่ออ่านจากประวัติไม่ได้
+      double lots   = OrderLots();
+      double openPx = OrderOpenPrice();
+      double pnl    = OrderProfit() + OrderSwap() + OrderCommission();
+
       bool done = false;
       for(int attempt = 0; attempt < 3 && !done; attempt++)
         {
          RefreshRates();
-         if(OrderClose(ticket, OrderLots(), NormalizeDouble(Bid, Digits),
+         if(OrderClose(ticket, lots, NormalizeDouble(Bid, Digits),
                        (int)g_slippage, clrGray))
            {
             Print("CLOSE BUY | ", why);
+
+            // ปิดแล้วเลือกตั๋วเดิมซ้ำได้จากประวัติ — จะได้กำไร "จริง" หลังหักค่าคอม
+            // และราคาที่ปิดได้จริง ไม่ใช่ Bid ตอนสั่ง
+            double realized = pnl, exitPx = Bid;
+            if(OrderSelect(ticket, SELECT_BY_TICKET))
+              {
+               realized = OrderProfit() + OrderSwap() + OrderCommission();
+               exitPx   = OrderClosePrice();
+              }
+
+            if(UseTelegram)
+               TelegramSend(StringFormat("EA No9 %s %s\nCLOSE BUY %.2f lot | %s\n" +
+                                         "entry %s exit %s | P/L %.2f %s",
+                                         Symbol(), TFText(Period()), lots, why,
+                                         DoubleToString(openPx, Digits),
+                                         DoubleToString(exitPx, Digits),
+                                         realized, AccountCurrency()));
             done = true;
            }
          else
@@ -402,5 +452,104 @@ void CloseOwnTrade(const string why)
       if(!done)
          return;                              // ปิดไม่ได้จริง ๆ ออกไปลองรอบ tick หน้า
      }
+  }
+
+//+------------------------------------------------------------------+
+//| ส่งข้อความเข้า Telegram ผ่าน Bot API                               |
+//|                                                                  |
+//| ต้องเปิด Tools > Options > Expert Advisors                        |
+//|   ติ๊ก Allow WebRequest for listed URL + เพิ่ม                     |
+//|   https://api.telegram.org                                        |
+//| ไม่เปิด = WebRequest คืน -1 พร้อม error 4060                       |
+//| หมายเหตุ: WebRequest ใช้ใน Strategy Tester ไม่ได้ คืน -1 เสมอ       |
+//| (โค้ดชุดนี้ก๊อปมาจาก MySignal_Telegram.mq4 ตั้งใจให้ไฟล์นี้อยู่ได้เอง  |
+//|  ไม่ต้องพึ่ง #include แก้ที่ไหนต้องแก้ให้ตรงกันทั้งสองไฟล์)           |
+//+------------------------------------------------------------------+
+bool TelegramSend(const string text)
+  {
+   // Strategy Tester ใช้ WebRequest ไม่ได้ คืน -1 เสมอ — ไม่งั้น log ท่วมตอน optimize
+   if(IsTesting() || IsOptimization() || IsVisualMode())
+      return(false);
+   if(StringLen(BotToken) < 20 || StringLen(ChatId) < 3)
+     {
+      Print("Telegram: BotToken / ChatId is empty");
+      return(false);
+     }
+
+   string url  = "https://api.telegram.org/bot" + BotToken + "/sendMessage";
+   string body = "chat_id=" + UrlEncode(ChatId)
+               + "&disable_web_page_preview=true"
+               + "&text=" + UrlEncode(text);
+
+   char   data[], result[];
+   string resultHeaders;
+   string headers = "Content-Type: application/x-www-form-urlencoded\r\n";
+
+   // StringToCharArray แถม null ปิดท้ายมาด้วย ต้องตัดทิ้งก่อนส่ง
+   int n = StringToCharArray(body, data, 0, StringLen(body));
+   if(n > 0 && data[n - 1] == 0)
+      n--;
+   ArrayResize(data, n);
+
+   ResetLastError();
+   int res = WebRequest("POST", url, headers, 3000, data, result, resultHeaders);
+
+   if(res == -1)
+     {
+      int err = GetLastError();
+      Print(StringFormat("Telegram WebRequest failed, error %d%s", err,
+                         (err == 4060
+                          ? " - add https://api.telegram.org in Tools > Options > Expert Advisors"
+                          : "")));
+      return(false);
+     }
+   if(res != 200)
+     {
+      Print(StringFormat("Telegram HTTP %d: %s", res,
+                         CharArrayToString(result, 0, (int)MathMin(ArraySize(result), 300))));
+      return(false);
+     }
+   return(true);
+  }
+
+//+------------------------------------------------------------------+
+//| แปลงข้อความเป็น percent-encoding แบบ UTF-8                        |
+//+------------------------------------------------------------------+
+string UrlEncode(const string src)
+  {
+   uchar  bytes[];
+   string out = "";
+   int    n = StringToCharArray(src, bytes, 0, -1, CP_UTF8);
+   if(n > 0 && bytes[n - 1] == 0)
+      n--;
+
+   for(int i = 0; i < n; i++)
+     {
+      uchar c = bytes[i];
+      if((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+         (c >= 'a' && c <= 'z') || c == '-' || c == '_' || c == '.' || c == '~')
+         out += CharToStr(c);
+      else
+         out += StringFormat("%%%02X", c);
+     }
+   return(out);
+  }
+
+//+------------------------------------------------------------------+
+string TFText(const int tf)
+  {
+   switch(tf)
+     {
+      case PERIOD_M1:  return("M1");
+      case PERIOD_M5:  return("M5");
+      case PERIOD_M15: return("M15");
+      case PERIOD_M30: return("M30");
+      case PERIOD_H1:  return("H1");
+      case PERIOD_H4:  return("H4");
+      case PERIOD_D1:  return("D1");
+      case PERIOD_W1:  return("W1");
+      case PERIOD_MN1: return("MN");
+     }
+   return("TF" + (string)tf);
   }
 //+------------------------------------------------------------------+
