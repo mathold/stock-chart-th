@@ -17,6 +17,7 @@ Thai Stock 4-Panel Dashboard
 
 from __future__ import annotations
 
+import math
 import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -202,7 +203,8 @@ def readout(fig, text: str, row: int, col: int, size: int = 9.5):
     )
 
 
-def value_tag(fig, value, color: str, row: int, col: int, digits: int = 2):
+def value_tag(fig, value, color: str, row: int, col: int, digits: int = 2,
+              log: bool = False):
     """ป้ายค่าล่าสุด — ติดขอบ "ขวา" ของช่อง ทับตัวเลขแกนราคาตรงระดับนั้นพอดี
 
     วางนอกกรอบกราฟ จึงต้องมี margin ขวา/ระยะห่างระหว่างคอลัมน์กว้างพอ
@@ -210,8 +212,14 @@ def value_tag(fig, value, color: str, row: int, col: int, digits: int = 2):
     """
     if value is None or pd.isna(value):
         return
+    # แกน log ของ Plotly รับตำแหน่ง annotation เป็น "เลขชี้กำลัง" ไม่ใช่ราคา
+    y = float(value)
+    if log:
+        if y <= 0:
+            return
+        y = math.log10(y)
     fig.add_annotation(
-        xref="x domain", yref="y", x=1.008, y=float(value),
+        xref="x domain", yref="y", x=1.008, y=y,
         xanchor="left", yanchor="middle",
         text=f" {fmt(value, digits)} ", showarrow=False,
         font=dict(size=TAG_FONT_SIZE, color="#FFFFFF"),
@@ -273,7 +281,8 @@ def draw_ribbon(fig, df: pd.DataFrame, x: list[str], row: int, col: int,
 
 
 def draw_panel(fig, df: pd.DataFrame, tf: str, base_row: int, col: int,
-               show_legend: bool, bars: int = BARS, ribbon: bool = False):
+               show_legend: bool, bars: int = BARS, ribbon: bool = False,
+               log: bool = False):
     df = df.copy()
     for n in EMA_STYLE:
         df[f"EMA{n}"] = ema(df["Close"], n)
@@ -347,7 +356,7 @@ def draw_panel(fig, df: pd.DataFrame, tf: str, base_row: int, col: int,
         emas += (f'   <span style="color:{rib_color}"><b>'
                  f'ริบบิ้น {RIBBON_FAST}/{RIBBON_SLOW} {rib_word}</b></span>')
     readout(fig, f"{ohlc}<br>{emas}", base_row, col)
-    value_tag(fig, last["Close"], bar_color, base_row, col)
+    value_tag(fig, last["Close"], bar_color, base_row, col, log=log)
 
     readout(fig, f'<span style="color:{MACD_LINE_COLOR}"><b>MACD {fmt(last["MACD"], 3)}</b></span>'
                  f'   <span style="color:{MACD_SIGNAL_COLOR}"><b>SIG {fmt(last["SIG"], 3)}</b></span>',
@@ -360,7 +369,7 @@ def draw_panel(fig, df: pd.DataFrame, tf: str, base_row: int, col: int,
 
 def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
                  height: int | None = CHART_HEIGHT,
-                 ribbon: bool = False) -> go.Figure:
+                 ribbon: bool = False, log: bool = False) -> go.Figure:
     """height=None = ไม่ล็อกความสูง ปล่อยให้ยืดตามกล่องที่ครอบอยู่ (ใช้กับเว็บ)
 
     ribbon=True = เปิดริบบิ้น EMA (ปุ่ม Cloud บนหน้าเว็บ)
@@ -379,7 +388,8 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
         if df is None or df.empty:
             continue
         base_row, col = PANEL_POS[i]
-        draw_panel(fig, df, tf, base_row, col, show_legend=(i == 0), ribbon=ribbon)
+        draw_panel(fig, df, tf, base_row, col, show_legend=(i == 0),
+                   ribbon=ribbon, log=log)
 
     # ให้แกน X ของสามแถวในช่องเดียวกันเลื่อน/ซูมพร้อมกัน
     for base_row, col, anchor in ((1, 1, "x"), (1, 2, "x2"), (4, 1, "x7"), (4, 2, "x8")):
@@ -392,16 +402,20 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
         fig.update_yaxes(range=[0, 100], dtick=25, row=base_row + 2, col=col)
 
     _style(fig, ticker, height, legend_x=0.30)
+    if log:                                  # ต้องตั้งหลัง _style ไม่งั้นโดนทับ
+        for base_row, col in PANEL_POS:
+            fig.update_yaxes(type="log", row=base_row, col=col)
     return fig
 
 
 def build_single_figure(ticker: str, df: pd.DataFrame, tf: str,
                         height: int | None = CHART_HEIGHT,
-                        ribbon: bool = False) -> go.Figure:
+                        ribbon: bool = False, log: bool = False) -> go.Figure:
     """โหมดเต็มจอ — ไทม์เฟรมเดียว 3 แถว (ราคา / MACD / RSI) ใช้พื้นที่ทั้งหน้า"""
     fig = make_subplots(rows=3, cols=1, row_heights=[0.66, 0.14, 0.20],
                         vertical_spacing=0.022)
-    draw_panel(fig, df, tf, 1, 1, show_legend=True, bars=BARS_FULL, ribbon=ribbon)
+    draw_panel(fig, df, tf, 1, 1, show_legend=True, bars=BARS_FULL,
+               ribbon=ribbon, log=log)
 
     for offset in (1, 2):
         fig.update_xaxes(matches="x", row=1 + offset, col=1)
@@ -413,6 +427,8 @@ def build_single_figure(ticker: str, df: pd.DataFrame, tf: str,
     fig.update_xaxes(nticks=12)
     _style(fig, ticker, height, legend_x=0.24)
     fig.update_yaxes(tickfont=dict(size=AXIS_FONT_SIZE + 1.5, color=TEXT_COLOR))
+    if log:
+        fig.update_yaxes(type="log", row=1, col=1)
     return fig
 
 

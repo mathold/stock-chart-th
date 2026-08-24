@@ -388,11 +388,19 @@ def _readout(fig, text: str, row: int, col: int, size: float = 9.0):
     )
 
 
-def _tag(fig, value, color: str, row: int, col: int, digits: int = 2):
+def _tag(fig, value, color: str, row: int, col: int, digits: int = 2,
+         log: bool = False):
     if value is None or pd.isna(value):
         return
+    # แกน log ของ Plotly รับตำแหน่ง annotation เป็น "เลขชี้กำลัง" ไม่ใช่ราคา
+    # ลืมแปลงแล้วป้ายราคาจะหลุดออกนอกจอทันที
+    y = float(value)
+    if log:
+        if y <= 0:
+            return
+        y = float(np.log10(y))
     fig.add_annotation(
-        xref="x domain", yref="y", x=1.008, y=float(value),
+        xref="x domain", yref="y", x=1.008, y=y,
         xanchor="left", yanchor="middle",
         text=f" {d.fmt(value, digits)} ", showarrow=False,
         font=dict(size=9.5, color="#000000"), bgcolor=color, borderpad=2,
@@ -495,7 +503,7 @@ def _draw_p49(fig, df: pd.DataFrame, x: list[str], row: int, col: int):
 
 
 def draw_panel(fig, src: pd.DataFrame, tf: str, base_row: int, col: int,
-               bars: int = BARS):
+               bars: int = BARS, log: bool = False):
     """วาดหนึ่งช่อง = 3 แถว (BBE / DE / MCD)"""
     df = src.copy()
     df["_F"], df["_S"] = bbe(df["Close"])
@@ -572,7 +580,7 @@ def draw_panel(fig, src: pd.DataFrame, tf: str, base_row: int, col: int,
                   f'L {d.fmt(last["Low"])}  C {d.fmt(last["Close"])}  {pct:+.2f}%<br>'
                   f'<span style="color:{trend_color}"><b>{trend_word}</b></span>{cnt}',
              base_row, col)
-    _tag(fig, last["Close"], trend_color, base_row, col)
+    _tag(fig, last["Close"], trend_color, base_row, col, log=log)
 
     de_last = ded["Close"].iloc[-1]
     de_color = DE_IN if bool(ded["Up"].iloc[-1]) else DE_OUT
@@ -593,8 +601,12 @@ def draw_panel(fig, src: pd.DataFrame, tf: str, base_row: int, col: int,
 
 
 def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
-                 height: int | None = None) -> go.Figure:
-    """โหมด 4 จอ — สี่ไทม์เฟรม ช่องละ 3 แถว"""
+                 height: int | None = None, log: bool = False) -> go.Figure:
+    """โหมด 4 จอ — สี่ไทม์เฟรม ช่องละ 3 แถว
+
+    log=True → แกนราคาเป็นลอการิทึม (แบบเดียวกับ Homily Chart)
+               ช่อง DE/MCD ยังเป็นเส้นตรงเสมอ เพราะมีค่าติดลบและเป็น %
+    """
     fig = make_subplots(
         rows=6, cols=2,
         row_heights=[0.20, 0.07, 0.07, 0.20, 0.07, 0.07],
@@ -608,7 +620,7 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
         if df is None or df.empty or len(df) < 12:
             continue
         base_row, col = PANEL_POS[i]
-        draw_panel(fig, df, tf, base_row, col)
+        draw_panel(fig, df, tf, base_row, col, log=log)
 
     for base_row, col, anchor in ((1, 1, "x"), (1, 2, "x2"), (4, 1, "x7"), (4, 2, "x8")):
         for offset in (1, 2):
@@ -617,16 +629,20 @@ def build_figure(ticker: str, panels: dict[str, pd.DataFrame],
             fig.update_xaxes(showticklabels=False, row=base_row + offset, col=col)
 
     _style(fig, ticker, height, [(r + 2, c) for r, c in PANEL_POS])
+    if log:                                  # ต้องตั้งหลัง _style ไม่งั้นโดนทับ
+        for base_row, col in PANEL_POS:
+            fig.update_yaxes(type="log", row=base_row, col=col)
     return fig
 
 
 def build_single_figure(ticker: str, df: pd.DataFrame, tf: str,
-                        height: int | None = None) -> go.Figure:
-    """โหมดเต็มจอ — ไทม์เฟรมเดียว 3 แถวเต็มหน้า"""
+                        height: int | None = None,
+                        log: bool = False) -> go.Figure:
+    """โหมดเต็มจอ — ไทม์เฟรมเดียว 3 แถวเต็มหน้า · log=True = แกนราคาลอการิทึม"""
     fig = make_subplots(rows=3, cols=1, row_heights=[0.62, 0.19, 0.19],
                         vertical_spacing=0.02)
     if df is not None and not df.empty and len(df) >= 12:
-        draw_panel(fig, df, tf, 1, 1, bars=BARS_FULL)
+        draw_panel(fig, df, tf, 1, 1, bars=BARS_FULL, log=log)
 
     for offset in (1, 2):
         fig.update_xaxes(matches="x", row=1 + offset, col=1)
@@ -636,6 +652,8 @@ def build_single_figure(ticker: str, df: pd.DataFrame, tf: str,
     fig.update_xaxes(nticks=12)
     _style(fig, ticker, height, [(3, 1)])
     fig.update_yaxes(tickfont=dict(size=AXIS_FONT + 1.5, color=TXT))
+    if log:
+        fig.update_yaxes(type="log", row=1, col=1)
     return fig
 
 

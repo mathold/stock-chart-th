@@ -78,6 +78,7 @@ st.session_state.setdefault("symbol", "SET")
 st.session_state.setdefault("market", None)      # None = ให้ระบบเดาตลาดเอง
 st.session_state.setdefault("fullscreen", False)  # True = โหมดไทม์เฟรมเดียวเต็มจอ
 st.session_state.setdefault("cloud", False)       # True = เปิดริบบิ้น EMA (ปุ่ม Cloud)
+st.session_state.setdefault("logscale", False)    # True = แกนราคาเป็น log (แบบ Homily)
 st.session_state.setdefault("mysig", False)       # True = ชุด BBE/DE/MCD พื้นดำ (My Signal)
 st.session_state.setdefault("mysig_ok", False)    # ใส่รหัสถูกแล้วในแท็บนี้
 st.session_state.setdefault("mysig_ask", False)   # กำลังโชว์ช่องใส่รหัสอยู่
@@ -263,12 +264,14 @@ def one_panel(cand: str, tf: str, daily: pd.DataFrame) -> pd.DataFrame:
 
 
 def build(symbol: str, market: str | None = None, full_tf: str | None = None,
-          ribbon: bool = False, mysig: bool = False):
+          ribbon: bool = False, mysig: bool = False, log: bool = False):
     """คืน (figure, สัญลักษณ์ที่ใช้ได้, ข้อมูลครบไหม) หรือ None ถ้าไม่มีข้อมูลเลย
 
     full_tf = None → กราฟ 4 จอเหมือนเดิม · ใส่ชื่อไทม์เฟรม → เต็มจอช่องเดียว
     ribbon = True → ระบายริบบิ้น EMA 10/30 ทับพื้นหลัง (ปุ่ม Cloud)
     mysig = True → เปลี่ยนไปใช้ชุด BBE / DE / MCD พื้นดำ (ปุ่ม My Signal)
+    log = True → แกนราคาเป็นลอการิทึม (ปุ่ม Log) — Homily Chart ใช้แบบนี้
+                 หุ้นที่ราคาขึ้นหลายเท่าจะเห็นความชันของขาขึ้นตามจริง ไม่บวมท้ายกราฟ
 
     โหมด My Signal ห่อด้วย try — ถ้าโมดูลนั้นพังด้วยเหตุใดก็ตาม ให้ถอยไปวาดกราฟ
     ชุดเดิมแทนที่จะปล่อยให้ทั้งหน้าเป็นจอแดง (แอปบน iPad ใช้งานต่อได้เสมอ)
@@ -287,12 +290,13 @@ def build(symbol: str, market: str | None = None, full_tf: str | None = None,
         if mysig:
             try:
                 return (ms.build_single_figure(symbol.upper(), df, full_tf,
-                                               height=None), cand, True)
+                                               height=None, log=log), cand, True)
             except Exception as e:                          # noqa: BLE001
                 st.session_state.setdefault("fetch_errors", []).append(
                     f"โหมด My Signal: {type(e).__name__} — {e}")
         return (d.build_single_figure(symbol.upper(), df, full_tf,
-                                      height=None, ribbon=ribbon), cand, True)
+                                      height=None, ribbon=ribbon, log=log),
+                cand, True)
 
     # หุ้นไทยใช้แท่ง 120 นาที (วันทำการสั้น) · เมกา/คริปโตใช้ 240 นาที
     # ดูจากชื่อที่ดึงได้จริง ไม่ใช่จากกลุ่ม เพราะพิมพ์เองก็ต้องได้ถูกเหมือนกัน
@@ -306,12 +310,13 @@ def build(symbol: str, market: str | None = None, full_tf: str | None = None,
     }
     if mysig:
         try:
-            return (ms.build_figure(symbol.upper(), panels, height=None),
+            return (ms.build_figure(symbol.upper(), panels, height=None, log=log),
                     cand, not intraday.empty)
         except Exception as e:                              # noqa: BLE001
             st.session_state.setdefault("fetch_errors", []).append(
                 f"โหมด My Signal: {type(e).__name__} — {e}")
-    return (d.build_figure(symbol.upper(), panels, height=None, ribbon=ribbon),
+    return (d.build_figure(symbol.upper(), panels, height=None, ribbon=ribbon,
+                          log=log),
             cand, not intraday.empty)
 
 
@@ -319,8 +324,8 @@ def build(symbol: str, market: str | None = None, full_tf: str | None = None,
 # หน้าเว็บ
 # ─────────────────────────────────────────────────────────────
 
-c1, c2, c3, c4, c5, c6, c7, c8, c9 = st.columns(
-    [2.25, 1.15, 2.25, .8, 1.0, .95, .95, 1.05, 1.7])
+c1, c2, c3, c4, c5, c6, c7, c8, c9, c10 = st.columns(
+    [2.05, 1.1, 2.05, .8, 1.0, .9, .9, .8, 1.0, 1.6])
 
 typed = c1.text_input("ชื่อหุ้น", key="typed", label_visibility="collapsed",
                       placeholder="พิมพ์ชื่อย่อ เช่น PTT · AAPL · BTC แล้วกด Enter")
@@ -360,9 +365,18 @@ if c7.button(full_label, **FULL_BTN,
     st.session_state.fullscreen = not st.session_state.fullscreen
     st.rerun()                          # ความสูงกราฟเปลี่ยนตามโหมด ต้องวาด CSS ใหม่
 
-# ปุ่มริบบิ้น — อยู่ถัดจากปุ่ม Full
+# ปุ่มสเกลแกนราคา — log เหมือน Homily Chart · linear แบบเดิม
+# ใช้ได้ทั้งกราฟชุดปกติและโหมด My Signal (ช่อง DE/MCD ยังเป็นเส้นตรงเสมอ)
+log_label = "Log ✓" if st.session_state.logscale else "Log"
+if c8.button(log_label, **FULL_BTN,
+             help="แกนราคาเป็นลอการิทึม — ระยะเท่ากัน = %% เท่ากัน "
+                  "(Homily Chart ใช้แบบนี้) เหมาะกับหุ้นที่ราคาขึ้นหลายเท่า"):
+    st.session_state.logscale = not st.session_state.logscale
+    st.rerun()          # ป้ายบนปุ่มวาดไปแล้ว ต้องวาดใหม่ให้ตรงสถานะ
+
+# ปุ่มริบบิ้น — อยู่ถัดจากปุ่ม Log
 cloud_label = "Cloud ✓" if st.session_state.cloud else "Cloud"
-if c8.button(cloud_label, **FULL_BTN, disabled=st.session_state.mysig,
+if c9.button(cloud_label, **FULL_BTN, disabled=st.session_state.mysig,
              help="ริบบิ้น EMA 10/30 — เขียว = ขาขึ้น · ชมพู = ขาลง "
                   "พร้อมป้าย B/S ตรงจุดที่ริบบิ้นเปลี่ยนสี"):
     st.session_state.cloud = not st.session_state.cloud
@@ -378,7 +392,7 @@ elif mysig_unlocked():
 else:
     mysig_label = "My Signal 🔒"
 
-if c9.button(mysig_label, **FULL_BTN,
+if c10.button(mysig_label, **FULL_BTN,
              help="BBE ริบบิ้นเขียว/แดง + เลข 1-9 · DE เงินทุนเข้า-ออก · "
                   "MCD กระจายต้นทุน — เลียนแบบ Homily Chart จากข้อมูล Yahoo"):
     if st.session_state.mysig:                  # เปิดอยู่ → ปิด ไม่ต้องถามรหัส
@@ -430,6 +444,7 @@ st.session_state.fetch_errors = []
 with st.spinner(f"กำลังดึงข้อมูล {symbol} ..."):
     result = build(symbol, st.session_state.market, full_tf,
                    ribbon=st.session_state.cloud,
+                   log=st.session_state.logscale,
                    mysig=st.session_state.mysig)
 
 if result is None:
