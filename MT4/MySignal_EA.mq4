@@ -23,63 +23,63 @@
 #property strict
 
 //====================== อินพุต =====================================
-input string  __s1__            = "--- สัญญาณ My Signal ---";
-input int     BbeFast           = 13;      // EMA เร็ว (ซ้อนสองชั้น)
-input int     BbeSlow           = 34;      // EMA ช้า  (ซ้อนสองชั้น)
-input int     DeFast            = 13;      // VWMA เร็ว
-input int     DeSlow            = 55;      // VWMA ช้า
-input int     DeSmooth          = 5;       // EMA ปรับ DE ให้ลื่น
-input int     CalcBars          = 400;     // คำนวณย้อนหลังกี่แท่งต่อรอบ
-input bool    TradeOnBarClose   = true;    // เข้าเมื่อแท่งปิดแล้วเท่านั้น (แนะนำ)
-input bool    AllowShort        = false;   // เปิดฝั่ง Sell ด้วย (ค่าเริ่มต้น = ซื้ออย่างเดียว)
-input bool    CloseOnOpposite   = true;    // สัญญาณสวนทาง = ปิดไม้เดิม
+input string  __s1__            = "--- My Signal rules ---";
+input int     BbeFast           = 13;   // Fast EMA (double smoothed)
+input int     BbeSlow           = 34;   // Slow EMA (double smoothed)
+input int     DeFast            = 13;   // Fast VWMA
+input int     DeSlow            = 55;   // Slow VWMA
+input int     DeSmooth          = 5;   // DE smoothing EMA
+input int     CalcBars          = 400;   // Bars to calculate per pass
+input bool    TradeOnBarClose   = true;   // Trade on closed bar only (recommended)
+input bool    AllowShort        = false;   // Allow short trades (default: long only)
+input bool    CloseOnOpposite   = true;   // Opposite signal closes the trade
 
-input string  __s2__            = "--- ตัวกรองเฉพาะของ My Signal ---";
-input bool    RequireDeAbove0   = false;   // ซื้อเฉพาะตอน DE เหนือ 0
-input bool    HalfLotUnconfirmed= true;    // DE ยังไม่ยืนยัน = เข้าครึ่งไม้
-input bool    SkipWhenCount9    = false;   // นับขึ้นครบ 9 แล้วไม่เข้าไม้ใหม่
-input bool    ReduceOnFade      = false;   // สถานะ "ลดไม้" = ปิดครึ่งไม้
-input bool    UseMcdFilter      = false;   // ใช้ MCD ยืนยัน (ต้องมี MySignal_MCD.ex4)
+input string  __s2__            = "--- My Signal filters ---";
+input bool    RequireDeAbove0   = false;   // Buy only when DE is above 0
+input bool    HalfLotUnconfirmed= true;   // Half lot when DE not confirmed
+input bool    SkipWhenCount9    = false;   // Skip entry when up-count reached 9
+input bool    ReduceOnFade      = false;   // Close half when status = REDUCE
+input bool    UseMcdFilter      = false;   // Use MCD confirm (needs MySignal_MCD.ex4)
 
-input string  __s3__            = "--- ตัวกรองทั่วไป (ปิดหมด = กฎล้วน ๆ) ---";
-input bool    UseTrendFilter    = false;   // เทรนด์ใหญ่: Buy ต้องอยู่เหนือ EMA ยาว
-input int     TrendEMA          = 200;
-input bool    UseAdxFilter      = false;   // ADX ต้องเกินค่าที่ตั้ง
-input int     AdxPeriod         = 14;
-input double  AdxMin            = 22.0;
-input bool    UseRibbonGapFilter= false;   // ริบบิ้นต้องกว้างพอ (กรองไซด์เวย์)
-input double  GapAtrMultiple    = 0.25;
+input string  __s3__            = "--- General filters (all off = pure rules) ---";
+input bool    UseTrendFilter    = false;   // Big trend: buy only above long EMA
+input int     TrendEMA          = 200;   // Long EMA period
+input bool    UseAdxFilter      = false;   // ADX must exceed the minimum
+input int     AdxPeriod         = 14;   // ADX period
+input double  AdxMin            = 22.0;   // ADX minimum
+input bool    UseRibbonGapFilter= false;   // Ribbon must be wide enough (skip flat)
+input double  GapAtrMultiple    = 0.25;   // Gap >= n x ATR
 
-input string  __s4__            = "--- หยุดขาดทุน / ทำกำไร ---";
-input bool    UseAtrStops       = true;    // true = คิดจาก ATR · false = ค่าพิพคงที่
-input int     AtrPeriod         = 14;
-input double  SlAtrMultiple     = 2.0;     // SL = 2 x ATR
-input double  TpAtrMultiple     = 0;       // TP = n x ATR (0 = ไม่ตั้ง ปล่อยให้สัญญาณพาออก)
-input double  SlPips            = 300;     // ใช้เมื่อ UseAtrStops = false
-input double  TpPips            = 0;       // 0 = ไม่ตั้ง TP
-input bool    UseBreakEven      = false;   // เลื่อน SL มาที่ทุนเมื่อกำไรถึงเป้า
-input double  BreakEvenAtR      = 1.0;
-input bool    UseTrailing       = false;   // trailing stop ตาม ATR
-input double  TrailAtrMultiple  = 2.0;
+input string  __s4__            = "--- Stop loss / take profit ---";
+input bool    UseAtrStops       = true;   // true = ATR based, false = fixed pips
+input int     AtrPeriod         = 14;   // ATR period
+input double  SlAtrMultiple     = 2.0;   // SL = n x ATR
+input double  TpAtrMultiple     = 0;   // TP = n x ATR (0 = no TP)
+input double  SlPips            = 300;   // SL in pips (when UseAtrStops = false)
+input double  TpPips            = 0;   // TP in pips (0 = no TP)
+input bool    UseBreakEven      = false;   // Move SL to entry at target profit
+input double  BreakEvenAtR      = 1.0;   // Profit in R before break-even
+input bool    UseTrailing       = false;   // ATR trailing stop
+input double  TrailAtrMultiple  = 2.0;   // Trail = n x ATR
 
-input string  __s5__            = "--- ขนาดไม้ / ความเสี่ยง ---";
-input bool    UseRiskPercent    = true;    // true = คิดล็อตจาก % พอร์ต
-input double  RiskPercent       = 1.0;     // เสี่ยงกี่ % ของพอร์ตต่อไม้
-input double  FixedLots         = 0.01;    // ใช้เมื่อ UseRiskPercent = false
-input double  MaxLots           = 5.0;     // เพดานล็อตกันพลาด
+input string  __s5__            = "--- Position size / risk ---";
+input bool    UseRiskPercent    = true;   // true = size from % of balance
+input double  RiskPercent       = 1.0;   // Risk per trade (% of balance)
+input double  FixedLots         = 0.01;   // Fixed lots (when UseRiskPercent = false)
+input double  MaxLots           = 5.0;   // Lot ceiling (safety)
 
-input string  __s6__            = "--- ตัวกรองบริบท ---";
-input double  MaxSpreadPips     = 5.0;     // สเปรดกว้างกว่านี้ = ไม่เข้าไม้ใหม่ (0 = ไม่เช็ก)
-input bool    UseTimeFilter     = false;   // จำกัดชั่วโมงเทรด (เวลาเซิร์ฟเวอร์)
-input int     StartHour         = 8;
-input int     EndHour           = 22;
-input bool    FridayCloseAll    = false;   // ปิดไม้ทั้งหมดก่อนตลาดปิดศุกร์
-input int     FridayCloseHour   = 21;
+input string  __s6__            = "--- Context filters ---";
+input double  MaxSpreadPips     = 5.0;   // Skip new trade above this spread (0 = off)
+input bool    UseTimeFilter     = false;   // Limit trading hours (server time)
+input int     StartHour         = 8;   // Start hour
+input int     EndHour           = 22;   // End hour
+input bool    FridayCloseAll    = false;   // Close everything before Friday close
+input int     FridayCloseHour   = 21;   // Friday close hour
 
-input string  __s7__            = "--- อื่น ๆ ---";
-input int     MagicNumber       = 13341;   // เลขประจำ EA ตัวนี้ (อย่าซ้ำกับ EA อื่น)
-input int     SlippagePips      = 3;
-input string  TradeComment      = "MySignal";
+input string  __s7__            = "--- Misc ---";
+input int     MagicNumber       = 13341;   // Magic number (unique per EA)
+input int     SlippagePips      = 3;   // Slippage in pips
+input string  TradeComment      = "MySignal";   // Order comment
 
 //====================== ค่าคงที่สัญญาณ =============================
 #define SIG_NONE  0
@@ -109,22 +109,22 @@ int OnInit()
   {
    if(BbeFast < 1 || BbeSlow < 1 || BbeFast >= BbeSlow)
      {
-      Print("ค่า BBE ไม่ถูกต้อง — ต้องเป็นบวกและ BbeFast < BbeSlow");
+      Print("Bad BBE inputs - must be positive and BbeFast < BbeSlow");
       return(INIT_PARAMETERS_INCORRECT);
      }
    if(DeFast < 1 || DeSlow < 1 || DeFast >= DeSlow || DeSmooth < 1)
      {
-      Print("ค่า DE ไม่ถูกต้อง — ต้องเป็นบวกและ DeFast < DeSlow");
+      Print("Bad DE inputs - must be positive and DeFast < DeSlow");
       return(INIT_PARAMETERS_INCORRECT);
      }
    if(CalcBars < 100)
      {
-      Print("CalcBars ต้องอย่างน้อย 100 แท่ง");
+      Print("CalcBars must be at least 100");
       return(INIT_PARAMETERS_INCORRECT);
      }
    if(UseRiskPercent && (RiskPercent <= 0 || RiskPercent > 10))
      {
-      Print("RiskPercent ต้องอยู่ระหว่าง 0-10 %");
+      Print("RiskPercent must be between 0 and 10");
       return(INIT_PARAMETERS_INCORRECT);
      }
 
@@ -134,7 +134,7 @@ int OnInit()
       g_pip = Point * 10;
    g_slippage = SlippagePips * (g_pip / Point);
 
-   Print(StringFormat("MySignal_EA เริ่มทำงาน %s | BBE %d/%d | DE %d/%d | 1 pip = %s",
+   Print(StringFormat("MySignal_EA started %s | BBE %d/%d | DE %d/%d | 1 pip = %s",
                       Symbol(), BbeFast, BbeSlow, DeFast, DeSlow,
                       DoubleToString(g_pip, Digits)));
    return(INIT_SUCCEEDED);
@@ -147,7 +147,7 @@ void OnTick()
 
    if(FridayCloseAll && DayOfWeek() == 5 && Hour() >= FridayCloseHour)
      {
-      CloseAll("ปิดก่อนตลาดปิดศุกร์");
+      CloseAll("Friday close");
       return;
      }
 
@@ -190,7 +190,7 @@ void OnTick()
             double half = MathFloor(NormalizeDouble((OrderLots() / 2.0) / lotStep, 8)) * lotStep;
             if(half >= minLot && OrderLots() - half >= minLot)
               {
-               Print("สถานะ ลดไม้ — ปิดครึ่งไม้ ", DoubleToString(half, 2), " lot");
+               Print("Status REDUCE - closing half ", DoubleToString(half, 2), " lot");
                g_reducedAt = OrderOpenTime();
                ClosePosition(ticket, NormalizeDouble(half, 2));
               }
@@ -235,7 +235,7 @@ bool Recalc()
       static bool warned = false;      // เตือนครั้งเดียว ไม่งั้นล็อกท่วมทุก tick
       if(!warned)
         {
-         Print("แท่งไม่พอสำหรับคำนวณ (มี ", Bars, " แท่ง) — เลื่อนกราฟไปทางซ้ายให้โหลดประวัติเพิ่ม");
+         Print("Not enough bars (", Bars, ") - scroll left to load more history");
          warned = true;
         }
       return(false);
@@ -427,7 +427,7 @@ bool PassContext()
       double spread = (Ask - Bid) / g_pip;
       if(spread > MaxSpreadPips)
         {
-         Print(StringFormat("ข้ามไม้ — สเปรดกว้าง %.1f pip", spread));
+         Print(StringFormat("Skip - spread too wide %.1f pip", spread));
          return(false);
         }
      }
@@ -449,7 +449,7 @@ void OpenTrade(const int cmd, const bool confirmed)
    double slDist = StopDistance();
    if(slDist <= 0)
      {
-      Print("คำนวณระยะ SL ไม่ได้ — ข้ามไม้นี้");
+      Print("Cannot compute SL distance - skipping");
       return;
      }
 
@@ -466,14 +466,14 @@ void OpenTrade(const int cmd, const bool confirmed)
         {
          lots = NormalizeDouble(half, 2);
          half_used = true;
-         Print("ตัวยืนยันยังไม่ครบ — เข้าครึ่งไม้ ", DoubleToString(lots, 2), " lot");
+         Print("Not confirmed - half lot ", DoubleToString(lots, 2), " lot");
         }
       else
-         Print("ตัวยืนยันยังไม่ครบ แต่ครึ่งไม้จะต่ำกว่า minLot — เข้าเต็มไม้");
+         Print("Not confirmed but half lot < minLot - using full lot");
      }
    if(lots <= 0)
      {
-      Print("คำนวณล็อตไม่ได้ — ข้ามไม้นี้");
+      Print("Cannot compute lot size - skipping");
       return;
      }
 
@@ -510,17 +510,17 @@ void OpenTrade(const int cmd, const bool confirmed)
                              MagicNumber, 0, (cmd == OP_BUY ? clrGreen : clrCrimson));
       if(ticket > 0)
         {
-         Print(StringFormat("เปิด %s %.2f lot ที่ %s | SL %s | TP %s | %s",
+         Print(StringFormat("OPEN %s %.2f lot at %s | SL %s | TP %s | %s",
                             (cmd == OP_BUY ? "BUY" : "SELL"), lots,
                             DoubleToString(price, Digits),
                             DoubleToString(sl, Digits),
                             (tp > 0 ? DoubleToString(tp, Digits) : "-"),
-                            (half_used ? "ครึ่งไม้" : "เต็มไม้")));
+                            (half_used ? "half" : "full")));
          return;
         }
 
       int err = GetLastError();
-      Print(StringFormat("OrderSend ไม่สำเร็จ (ครั้งที่ %d) error %d", attempt + 1, err));
+      Print(StringFormat("OrderSend failed (attempt %d) error %d", attempt + 1, err));
       if(err == ERR_NOT_ENOUGH_MONEY || err == ERR_TRADE_DISABLED ||
          err == ERR_INVALID_STOPS    || err == ERR_INVALID_TRADE_VOLUME)
          return;
@@ -579,15 +579,15 @@ double LotSize(const double slDist)
    if(lots < minLot)
      {
       // ปัดขึ้นให้ถึง minLot = เสี่ยงเกิน RiskPercent ที่ตั้งไว้ ต้องบอกให้รู้
-      Print(StringFormat("ล็อตที่คำนวณได้ %.4f ต่ำกว่า minLot %.2f — ใช้ minLot แทน "
-                         "(ไม้นี้เสี่ยงเกิน %.1f%% ที่ตั้งไว้)", lots, minLot, RiskPercent));
+      Print(StringFormat("Computed lot %.4f is below minLot %.2f - using minLot "
+                         "(this trade risks more than %.1f%%)", lots, minLot, RiskPercent));
       lots = minLot;
      }
 
    double need = MarketInfo(Symbol(), MODE_MARGINREQUIRED) * lots;
    if(need > AccountFreeMargin())
      {
-      Print("มาร์จิ้นไม่พอสำหรับ ", DoubleToString(lots, 2), " lot");
+      Print("Not enough margin for ", DoubleToString(lots, 2), " lot");
       return(0);
      }
 
@@ -654,7 +654,7 @@ void ModifySl(const int ticket, const double newSl)
    if(!OrderSelect(ticket, SELECT_BY_TICKET))
       return;
    if(!OrderModify(ticket, OrderOpenPrice(), newSl, OrderTakeProfit(), 0, clrOrange))
-      Print("OrderModify ไม่สำเร็จ error ", GetLastError());
+      Print("OrderModify failed error ", GetLastError());
   }
 
 //+------------------------------------------------------------------+
@@ -697,7 +697,7 @@ void ClosePosition(const int ticket, const double lots)
       if(OrderClose(ticket, vol, NormalizeDouble(price, Digits),
                     (int)g_slippage, clrGray))
          return;
-      Print("OrderClose ไม่สำเร็จ error ", GetLastError());
+      Print("OrderClose failed error ", GetLastError());
       Sleep(500);
      }
   }
@@ -710,7 +710,7 @@ void CloseAll(const string why)
       int ticket = FindOrder();
       if(ticket <= 0)
          return;
-      Print("ปิดไม้: ", why);
+      Print("Close: ", why);
       ClosePosition(ticket, 0);
      }
   }

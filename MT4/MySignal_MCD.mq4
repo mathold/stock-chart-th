@@ -34,12 +34,12 @@
 #property indicator_color7 clrHotPink
 #property indicator_color8 clrDeepSkyBlue
 
-input int    McdBars     = 600;    // คำนวณย้อนหลังกี่แท่ง (มากไปกราฟจะอืด)
-input int    McdLevels   = 120;    // จำนวนช่องราคาที่ใช้เก็บต้นทุน
-input double McdBand     = 0.08;   // ±8% รอบราคา = ช่วง "ลอย" (เหลือง)
-input double McdTurnover = 0.015;  // อัตราเปลี่ยนมือฐาน (มาก = ลืมต้นทุนเก่าเร็ว)
-input int    McdMa       = 10;     // คาบเส้นค่าเฉลี่ยสามเส้น
-input bool   ShowMaLines = true;   // แสดงเส้น MA10
+input int    McdBars     = 600;   // Bars to calculate (lower = faster)
+input int    McdLevels   = 120;   // Price bins for the cost map
+input double McdBand     = 0.08;   // Float band around price (0.08 = 8%)
+input double McdTurnover = 0.015;   // Base turnover rate
+input int    McdMa       = 10;   // MA period for the 3 lines
+input bool   ShowMaLines = true;   // Show the 3 MA lines
 
 // แท่งซ้อนวางไว้ที่ 0 / 2 / 4 โดยมีบัฟเฟอร์เปล่าคั่น
 // เพราะ MT4 จะจับ "ฮิสโตแกรมสองตัวที่ติดกัน" ไประบายสีระหว่างเส้น
@@ -55,7 +55,7 @@ int OnInit()
   {
    if(McdLevels < 20 || McdBand <= 0 || McdTurnover <= 0 || McdMa < 1)
      {
-      Print("MySignal_MCD: ค่าอินพุตไม่ถูกต้อง");
+      Print("MySignal_MCD: bad inputs");
       return(INIT_PARAMETERS_INCORRECT);
      }
 
@@ -83,14 +83,14 @@ int OnInit()
    SetIndexStyle(9, DRAW_NONE);
    SetIndexStyle(10, DRAW_NONE);
 
-   SetIndexLabel(0, "ติดดอย %");
+   SetIndexLabel(0, "Trapped %");
    SetIndexLabel(1, NULL);
-   SetIndexLabel(2, "ลอย+กำไร %");
+   SetIndexLabel(2, "Float + profit %");
    SetIndexLabel(3, NULL);
-   SetIndexLabel(4, "กำไร %");
-   SetIndexLabel(5, "MA กำไร");
-   SetIndexLabel(6, "MA ลอย");
-   SetIndexLabel(7, "MA ติดดอย");
+   SetIndexLabel(4, "Profit %");
+   SetIndexLabel(5, "MA profit");
+   SetIndexLabel(6, "MA float");
+   SetIndexLabel(7, "MA trapped");
    SetIndexLabel(8, NULL);
    SetIndexLabel(9, NULL);
    SetIndexLabel(10, NULL);

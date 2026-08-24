@@ -37,47 +37,61 @@
 #property indicator_color8 clrHotPink
 
 //====================== อินพุต =====================================
-input string __s1__          = "--- ริบบิ้น BBE ---";
-input int    BbeFast         = 13;            // EMA เร็ว (ซ้อนสองชั้น)
-input int    BbeSlow         = 34;            // EMA ช้า  (ซ้อนสองชั้น)
-input color  RibbonUpColor   = clrLimeGreen;  // ริบบิ้นขาขึ้น
-input color  RibbonDnColor   = clrCrimson;    // ริบบิ้นขาลง
-input int    RibbonWidth     = 1;             // ความหนาแท่งริบบิ้น (1-3)
+// ⚠ คำอธิบายอินพุตต้องเป็นภาษาอังกฤษเท่านั้น
+//   MT4 บน Mac (Wine) วาดหน้าต่าง Inputs เป็น ANSI ภาษาไทยจะกลายเป็น ????
+//   คำแปลไทยอยู่ในคอมเมนต์เหนือแต่ละกลุ่มข้างล่างนี้แทน
 
-input string __s2__          = "--- DE (ใช้ตัดสินสัญญาณ) ---";
-input int    DeFast          = 13;            // VWMA เร็ว
-input int    DeSlow          = 55;            // VWMA ช้า
-input int    DeSmooth        = 5;             // EMA ปรับให้ลื่น
+// ── ริบบิ้น BBE ── EMA ซ้อนสองชั้น เร็ว/ช้า · สีขาขึ้น/ขาลง · ความหนาแท่ง
+input string __s1__          = "--- BBE ribbon ---";
+input int    BbeFast         = 13;            // Fast EMA (double smoothed)
+input int    BbeSlow         = 34;            // Slow EMA (double smoothed)
+input color  RibbonUpColor   = clrLimeGreen;  // Ribbon color when bullish
+input color  RibbonDnColor   = clrCrimson;    // Ribbon color when bearish
+input int    RibbonWidth     = 1;             // Ribbon thickness (1-3)
 
-input string __s3__          = "--- ลูกศร / จุดสถานะแท่ง ---";
-input bool   ShowSignalArrow = true;          // ลูกศรซื้อ/ขาย
-input bool   ShowStateDots   = true;          // จุดถือของ (เขียว) / ถือเงินสด (ชมพู)
-input color  BuyColor        = clrYellow;     // เหลือง = ซื้อ
-input color  SellColor       = clrRed;        // แดง    = ขาย
-input color  HoldColor       = clrSpringGreen;// เขียว  = ถือของต่อ
-input color  CashColor       = clrHotPink;    // ชมพู   = ถือเงินสด
-input double MarkGapAtr      = 0.7;           // ระยะห่างลูกศรจากแท่ง (เท่าของ ATR14)
+// ── DE ── ผลต่าง VWMA เร็ว-ช้า แล้วปรับให้ลื่น (ใช้ตัดสินสัญญาณ)
+input string __s2__          = "--- DE (drives the signal) ---";
+input int    DeFast          = 13;            // Fast VWMA
+input int    DeSlow          = 55;            // Slow VWMA
+input int    DeSmooth        = 5;             // Smoothing EMA
 
-input string __s4__          = "--- Pattern 49 (เลข 1-9) ---";
-input bool   ShowCount       = true;          // แสดงเลขนับ
-input int    CountFontSize   = 8;             // ขนาดตัวเลข
-input color  CountUpColor    = clrAqua;       // ฟ้า = นับขึ้น
-input color  CountDnColor    = clrOrange;     // ส้ม = นับลง
-input int    LabelBars       = 400;           // วาดเลข/ป้ายย้อนหลังกี่แท่ง
+// ── ลูกศร / จุดสถานะแท่ง ── เหลือง=ซื้อ แดง=ขาย เขียว=ถือของ ชมพู=ถือเงินสด
+input string __s3__          = "--- Signal arrows / state dots ---";
+input bool   ShowSignalArrow = true;          // Show buy / sell arrows
+input bool   ShowStateDots   = true;          // Show hold / cash dots
+input color  BuyColor        = clrYellow;     // Buy signal (yellow)
+input color  SellColor       = clrRed;        // Sell signal (red)
+input color  HoldColor       = clrSpringGreen;// Hold position (green)
+input color  CashColor       = clrHotPink;    // Stay in cash (pink)
+input double MarkGapAtr      = 0.7;           // Arrow gap from bar (x ATR14)
 
-input string __s5__          = "--- กล่องสถานะ ---";
-input bool   ShowStatusBox   = true;          // แสดงกล่องสรุปว่าควรทำอะไร
-input bool   StatusOnClosedBar = true;        // อ่านจากแท่งที่ปิดแล้ว (แนะนำ)
-input int    StatusCorner    = 1;             // 0=ซ้ายบน 1=ขวาบน 2=ซ้ายล่าง 3=ขวาล่าง
-input int    StatusX         = 12;            // ระยะห่างขอบจอ แนวนอน (px)
-input int    StatusY         = 20;            // ระยะห่างขอบจอ แนวตั้ง (px)
-input int    StatusFontSize  = 10;            // ขนาดตัวอักษรสถานะ
+// ── Pattern 49 ── เลข 1-9 · ฟ้า = นับขึ้น (เหนือแท่ง) · ส้ม = นับลง (ใต้แท่ง)
+input string __s4__          = "--- Pattern 49 count (1-9) ---";
+input bool   ShowCount       = true;          // Show the 1-9 count
+input int    CountFontSize   = 8;             // Count font size
+input color  CountUpColor    = clrAqua;       // Up count (above bar)
+input color  CountDnColor    = clrOrange;     // Down count (below bar)
+input int    LabelBars       = 400;           // Draw labels over last N bars
 
-input string __s6__          = "--- แจ้งเตือน ---";
-input bool   AlertOnSignal   = true;          // เตือนเมื่อเกิดสัญญาณซื้อ/ขาย
-input bool   AlertPopup      = true;          // ป๊อปอัป + เสียงใน MT4
-input bool   AlertPush       = false;         // เข้าแอป MT4 มือถือ (ตั้ง MetaQuotes ID ก่อน)
-input bool   AlertEmail      = false;         // อีเมล (ตั้ง Tools > Options > Email ก่อน)
+// ── กล่องสถานะ ── สรุปว่าตอนนี้ควรทำอะไร
+//    StatusCorner : 0 = ซ้ายบน · 1 = ขวาบน · 2 = ซ้ายล่าง · 3 = ขวาล่าง
+//    StatusY = 34 ให้กล่องต่ำกว่าบรรทัดชื่อสินค้า/ราคาที่ MT4 เขียนไว้มุมซ้ายบน
+//    StatusEnglish = true ใช้ตัวอังกฤษ (BUY FULL / HOLD / REDUCE / EXIT / WAIT)
+input string __s5__          = "--- Status box ---";
+input bool   ShowStatusBox   = true;          // Show the status box
+input bool   StatusOnClosedBar = true;        // Read the closed bar (recommended)
+input int    StatusCorner    = 0;             // Corner: 0=TL 1=TR 2=BL 3=BR
+input int    StatusX         = 6;             // Offset from corner - X (px)
+input int    StatusY         = 34;            // Offset from corner - Y (px)
+input int    StatusFontSize  = 10;            // Status font size
+input bool   StatusEnglish   = true;          // English text (Wine shows Thai as ??)
+
+// ── แจ้งเตือน ── ป๊อปอัปในโปรแกรม / เข้าแอปมือถือ / อีเมล
+input string __s6__          = "--- Alerts ---";
+input bool   AlertOnSignal   = true;          // Alert on buy / sell signal
+input bool   AlertPopup      = true;          // Popup + sound in MT4
+input bool   AlertPush       = false;         // Push to MT4 mobile (set MetaQuotes ID)
+input bool   AlertEmail      = false;         // Email (set Tools > Options > Email)
 
 //====================== บัฟเฟอร์ ===================================
 double UpFast[], UpSlow[], DnFast[], DnSlow[];      // 0-3 ริบบิ้น
@@ -106,12 +120,12 @@ int OnInit()
   {
    if(BbeFast < 1 || BbeSlow < 1 || BbeFast >= BbeSlow)
      {
-      Print("MySignal: ค่า EMA ไม่ถูกต้อง — ต้องเป็นบวกและ BbeFast < BbeSlow");
+      Print("MySignal: bad EMA inputs - must be positive and BbeFast < BbeSlow");
       return(INIT_PARAMETERS_INCORRECT);
      }
    if(DeFast < 1 || DeSlow < 1 || DeFast >= DeSlow || DeSmooth < 1)
      {
-      Print("MySignal: ค่า DE ไม่ถูกต้อง — ต้องเป็นบวกและ DeFast < DeSlow");
+      Print("MySignal: bad DE inputs - must be positive and DeFast < DeSlow");
       return(INIT_PARAMETERS_INCORRECT);
      }
 
@@ -142,14 +156,14 @@ int OnInit()
    for(int b = 8; b < 16; b++)
       SetIndexStyle(b, DRAW_NONE);
 
-   SetIndexLabel(0, "BBE เร็ว (ขาขึ้น)");
-   SetIndexLabel(1, "BBE ช้า (ขาขึ้น)");
-   SetIndexLabel(2, "BBE เร็ว (ขาลง)");
-   SetIndexLabel(3, "BBE ช้า (ขาลง)");
-   SetIndexLabel(4, "สัญญาณซื้อ");
-   SetIndexLabel(5, "สัญญาณขาย");
-   SetIndexLabel(6, "ถือของต่อ");
-   SetIndexLabel(7, "ถือเงินสด");
+   SetIndexLabel(0, "BBE fast (up)");
+   SetIndexLabel(1, "BBE slow (up)");
+   SetIndexLabel(2, "BBE fast (down)");
+   SetIndexLabel(3, "BBE slow (down)");
+   SetIndexLabel(4, "Buy signal");
+   SetIndexLabel(5, "Sell signal");
+   SetIndexLabel(6, "Hold");
+   SetIndexLabel(7, "Cash");
    for(int k = 8; k < 16; k++)
       SetIndexLabel(k, NULL);
 
@@ -375,13 +389,16 @@ void DrawCounts(const datetime &time[], const double &high[],
                double atr = iATR(NULL, 0, 14, m);
                if(atr <= 0)
                   atr = high[m] - low[m];
-               double pad = atr * 0.35;
+               // เลข 1 (เริ่มรอบ = จุดซื้อตามคู่มือ) กับเลข 9 (จบรอบ) ทำตัวใหญ่กว่าเพื่อน
+               bool big  = ((int)v == 1 || (int)v >= P49_TARGET);
+               double pad = atr * (big ? 0.45 : 0.35);
                double price = (side == 0 ? high[m] + pad : low[m] - pad);
                DrawText(OBJ_PREFIX + "N" + (string)side + (string)(long)time[m],
                         time[m], price, DoubleToString(v, 0),
                         (side == 0 ? CountUpColor : CountDnColor),
-                        CountFontSize,
-                        (side == 0 ? ANCHOR_LOWER : ANCHOR_UPPER));
+                        (big ? CountFontSize + 4 : CountFontSize),
+                        (side == 0 ? ANCHOR_LOWER : ANCHOR_UPPER),
+                        (big ? "Arial Black" : "Tahoma"));
               }
            }
 
@@ -399,7 +416,7 @@ void DrawStatus(const double &close[], const int rates_total)
    if(rates_total < sh + 10)
       return;
 
-   string label = "อยู่เฉย", why = "ริบบิ้นแดง";
+   string label = T("อยู่เฉย", "WAIT"), why = T("ริบบิ้นแดง", "ribbon red");
    color  bg = CashColor, fg = clrBlack;
 
    bool   bull = (RibF[sh] >= RibS[sh]);
@@ -409,23 +426,29 @@ void DrawStatus(const double &close[], const int rates_total)
 
    if(code == SIG_SELL)
      {
-      label = "ออก";  why = "สัญญาณขาย";  bg = SellColor;  fg = clrWhite;
+      label = T("ออก", "EXIT");
+      why   = T("Sell signal", "sell signal");
+      bg = SellColor;  fg = clrWhite;
      }
    else if(!bull)
      {
-      label = "อยู่เฉย";  why = "ริบบิ้นแดง";  bg = CashColor;  fg = clrBlack;
+      label = T("อยู่เฉย", "WAIT");
+      why   = T("ริบบิ้นแดง", "ribbon red");
+      bg = CashColor;  fg = clrBlack;
      }
    else if(code == SIG_BUY)
      {
       if(de > 0 && deUp)
         {
-         label = "ซื้อเต็มไม้";  why = "ริบบิ้นเขียว + DE เหนือ 0 และกำลังขึ้น";
+         label = T("ซื้อเต็มไม้", "BUY FULL");
+         why   = T("ริบบิ้นเขียว + DE เหนือ 0 และกำลังขึ้น", "BBE green + DE above 0 rising");
          bg = HoldColor;  fg = clrBlack;
         }
       else
         {
-         label = "ซื้อครึ่งไม้";
-         why   = (de <= 0 ? "DE ยังใต้ 0" : "DE ยังไม่เขียว");
+         label = T("ซื้อครึ่งไม้", "BUY HALF");
+         why   = (de <= 0 ? T("DE ยังใต้ 0", "DE still below 0")
+                          : T("DE ยังไม่เขียว", "DE not rising yet"));
          bg = BuyColor;  fg = clrBlack;
         }
      }
@@ -443,28 +466,44 @@ void DrawStatus(const double &close[], const int rates_total)
 
       if(deFading || counted || narrowing)
         {
-         label = "ลดไม้";
-         why   = (deFading ? "DE ถอยลงหาเส้น 0"
-                           : (counted ? "นับขึ้นครบ 9 แล้ว" : "ริบบิ้นเริ่มบีบ"));
+         label = T("ลดไม้", "REDUCE");
+         why   = (deFading ? T("DE ถอยลงหาเส้น 0", "DE fading toward 0")
+                           : (counted ? T("นับขึ้นครบ 9 แล้ว", "count reached 9")
+                                      : T("ริบบิ้นเริ่มบีบ", "ribbon narrowing")));
          bg = clrOrange;  fg = clrBlack;
         }
       else
         {
-         label = "ถือต่อ";  why = "ยังไม่มีอะไรเปลี่ยน";
+         label = T("ถือต่อ", "HOLD");
+         why   = T("ยังไม่มีอะไรเปลี่ยน", "nothing changed");
          bg = clrSeaGreen;  fg = clrWhite;
         }
      }
 
-   string text = StringFormat("%s  |  %s  %s", label, Symbol(), TFText(Period()));
-   int    w    = StatusFontSize * 13 + 90;
-   int    h    = StatusFontSize * 2 + 26;
+   string text = StringFormat("%s  |  %s %s", label, Symbol(), TFText(Period()));
+
+   // กว้างตามข้อความจริง ไม่งั้นตัวอักษรล้นกล่อง
+   int len = (int)MathMax(StringLen(text), StringLen(why) + 2);
+   int w   = 20 + (int)(len * StatusFontSize * 0.62);
+   int h   = StatusFontSize * 2 + 22;
+
+   // MT4 วัดระยะไปที่มุมซ้ายบนของวัตถุเสมอ ต่อให้ผูกไว้มุมขวา/ล่าง
+   // ถ้าไม่บวกความกว้าง/สูงกลับเข้าไป กล่องจะยื่นออกนอกจอจนเห็นแค่แถบบาง ๆ
+   bool rightC  = (StatusCorner == 1 || StatusCorner == 3);
+   bool bottomC = (StatusCorner == 2 || StatusCorner == 3);
+   int  bx = (rightC  ? StatusX + w : StatusX);
+   int  by = (bottomC ? StatusY + h : StatusY);
+
+   int t1x = (rightC  ? bx - 8 : bx + 8);
+   int t1y = (bottomC ? by - 4 : by + 4);
+   int t2y = (bottomC ? by - (StatusFontSize + 9) : by + StatusFontSize + 9);
 
    string rect = OBJ_PREFIX + "BOX";
    if(ObjectFind(0, rect) < 0)
       ObjectCreate(0, rect, OBJ_RECTANGLE_LABEL, 0, 0, 0);
    ObjectSetInteger(0, rect, OBJPROP_CORNER, StatusCorner);
-   ObjectSetInteger(0, rect, OBJPROP_XDISTANCE, StatusX);
-   ObjectSetInteger(0, rect, OBJPROP_YDISTANCE, StatusY);
+   ObjectSetInteger(0, rect, OBJPROP_XDISTANCE, bx);
+   ObjectSetInteger(0, rect, OBJPROP_YDISTANCE, by);
    ObjectSetInteger(0, rect, OBJPROP_XSIZE, w);
    ObjectSetInteger(0, rect, OBJPROP_YSIZE, h);
    ObjectSetInteger(0, rect, OBJPROP_BGCOLOR, bg);
@@ -473,10 +512,16 @@ void DrawStatus(const double &close[], const int rates_total)
    ObjectSetInteger(0, rect, OBJPROP_BACK, false);
    ObjectSetInteger(0, rect, OBJPROP_SELECTABLE, false);
 
-   DrawLabel(OBJ_PREFIX + "TXT1", text, fg, StatusFontSize,
-             StatusX + 8, StatusY + 5);
-   DrawLabel(OBJ_PREFIX + "TXT2", why, fg, StatusFontSize - 2,
-             StatusX + 8, StatusY + StatusFontSize + 10);
+   DrawLabel(OBJ_PREFIX + "TXT1", text, fg, StatusFontSize,      t1x, t1y);
+   DrawLabel(OBJ_PREFIX + "TXT2", why,  fg, StatusFontSize - 2,  t1x, t2y);
+  }
+
+//+------------------------------------------------------------------+
+//| เลือกภาษาข้อความ — ไทยอ่านง่ายกว่า แต่ MT4 บน Mac/Wine วาดไม่ได้    |
+//+------------------------------------------------------------------+
+string T(const string th, const string en)
+  {
+   return(StatusEnglish ? en : th);
   }
 
 //+------------------------------------------------------------------+
@@ -499,13 +544,13 @@ void DrawLabel(const string name, const string text, const color clr,
 //+------------------------------------------------------------------+
 void DrawText(const string name, const datetime t, const double price,
               const string text, const color clr, const int size,
-              const int anchor)
+              const int anchor, const string font = "Tahoma")
   {
    if(ObjectFind(0, name) < 0)
       ObjectCreate(0, name, OBJ_TEXT, 0, t, price);
    ObjectSetDouble(0, name, OBJPROP_PRICE, price);
    ObjectSetString(0, name, OBJPROP_TEXT, text);
-   ObjectSetString(0, name, OBJPROP_FONT, "Tahoma");
+   ObjectSetString(0, name, OBJPROP_FONT, font);
    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, size);
    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
    ObjectSetInteger(0, name, OBJPROP_ANCHOR, anchor);
@@ -530,9 +575,10 @@ void CheckAlert(const datetime &time[], const double &close[],
       return;
    g_lastAlertBar = time[sh];
 
-   string side = (code == SIG_BUY ? "ซื้อ (Buy)" : "ขาย (Sell)");
-   string msg  = StringFormat("My Signal | %s %s | %s | ราคา %s",
+   string side = (code == SIG_BUY ? T("ซื้อ (Buy)", "BUY") : T("ขาย (Sell)", "SELL"));
+   string msg  = StringFormat("My Signal | %s %s | %s | %s %s",
                               Symbol(), TFText(Period()), side,
+                              T("ราคา", "price"),
                               DoubleToString(close[sh], Digits));
 
    if(AlertPopup) Alert(msg);

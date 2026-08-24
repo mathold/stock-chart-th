@@ -25,13 +25,13 @@
 #property indicator_levelcolor clrGold
 #property indicator_levelstyle STYLE_DOT
 
-input int   DeFast     = 13;        // VWMA เร็ว
-input int   DeSlow     = 55;        // VWMA ช้า
-input int   DeSmooth   = 5;         // EMA ปรับให้ลื่น
-input color InColor    = clrLime;   // เขียว = เงินไหลเข้า
-input color OutColor   = clrRed;    // แดง   = เงินไหลออก
-input int   HistWidth  = 2;         // ความหนาแท่ง
-input bool  ShowLine   = true;      // ลากเส้นทับแท่งด้วย
+input int   DeFast     = 13;   // Fast VWMA
+input int   DeSlow     = 55;   // Slow VWMA
+input int   DeSmooth   = 5;   // Smoothing EMA
+input color InColor    = clrLime;   // Money flowing in (green)
+input color OutColor   = clrRed;   // Money flowing out (red)
+input int   HistWidth  = 2;   // Histogram thickness
+input bool  ShowLine   = true;   // Draw the DE line on top
 
 double UpBuf[], DnBuf[], LineBuf[];
 
@@ -42,7 +42,7 @@ int OnInit()
   {
    if(DeFast < 1 || DeSlow < 1 || DeFast >= DeSlow || DeSmooth < 1)
      {
-      Print("MySignal_DE: ค่าไม่ถูกต้อง — ต้องเป็นบวกและ DeFast < DeSlow");
+      Print("MySignal_DE: bad inputs - must be positive and DeFast < DeSlow");
       return(INIT_PARAMETERS_INCORRECT);
      }
 
@@ -57,8 +57,8 @@ int OnInit()
    SetIndexStyle(1, DRAW_HISTOGRAM, STYLE_SOLID, HistWidth, OutColor);
    SetIndexStyle(2, (ShowLine ? DRAW_LINE : DRAW_NONE), STYLE_SOLID, 1, clrWhite);
 
-   SetIndexLabel(0, "DE เงินไหลเข้า");
-   SetIndexLabel(1, "DE เงินไหลออก");
+   SetIndexLabel(0, "DE money in");
+   SetIndexLabel(1, "DE money out");
    SetIndexLabel(2, "DE");
 
    SetIndexEmptyValue(0, EMPTY_VALUE);

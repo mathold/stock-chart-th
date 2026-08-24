@@ -76,6 +76,9 @@ SIG_MARK_PAD = 0.055            # ระยะห่างจากแท่ง 
 
 # ── Pattern 49 ── นับแท่งเทียบกับ 4 แท่งก่อนหน้า ครบ 9 แล้วเริ่มใหม่
 P49_LOOKBACK, P49_TARGET = 4, 9
+P49_BIG = (1, P49_TARGET)       # เลขที่ทำตัวใหญ่ — 1 = จุดเริ่มรอบ · 9 = จบรอบ
+P49_BIG_SIZE = 13.5             # ขนาดตัวใหญ่
+P49_SIZE = 9.5                  # ขนาดตัวปกติ
 P49_UP_COLOR = "#00E5FF"        # ฟ้า  = นับฝั่งขึ้น (อยู่เหนือแท่ง)
                                 # ย้ายจากชมพูเพราะชมพูไปเป็นแท่ง "ถือเงินสด" แล้ว
 P49_DOWN_COLOR = "#FF9A2E"      # ส้ม  = นับฝั่งลง  (อยู่ใต้แท่ง)
@@ -480,9 +483,12 @@ def _draw_p49(fig, df: pd.DataFrame, x: list[str], row: int, col: int):
         fig.add_trace(go.Scatter(
             x=[x[i] for i in np.flatnonzero(m.to_numpy())],
             y=sub[price_key] * pad, mode="text",
-            text=[f"<b>{v}</b>" if v == P49_TARGET else str(v) for v in sub[key]],
+            # เลข 1 (จุดเริ่มรอบ = จุดซื้อตามคู่มือ) กับเลข 9 (จบรอบ) ตัวใหญ่กว่าเพื่อน
+            # เหมือนที่ Homily เน้นให้เห็นเฉพาะสองตัวนี้
+            text=[f"<b>{v}</b>" if v in P49_BIG else str(v) for v in sub[key]],
             textposition=place,
-            textfont=dict(size=[12.5 if v == P49_TARGET else 9.5 for v in sub[key]],
+            textfont=dict(size=[P49_BIG_SIZE if v in P49_BIG else P49_SIZE
+                                for v in sub[key]],
                           color=color),
             showlegend=False, hoverinfo="skip",
         ), row=row, col=col)
