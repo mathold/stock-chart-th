@@ -26,6 +26,7 @@ import os
 import pandas as pd
 import streamlit as st
 
+import analytics as an
 import my_signal as ms
 import thai_stock_dashboard as d
 
@@ -80,6 +81,9 @@ st.session_state.setdefault("cloud", False)       # True = เปิดริบ
 st.session_state.setdefault("mysig", False)       # True = ชุด BBE/DE/MCD พื้นดำ (My Signal)
 st.session_state.setdefault("mysig_ok", False)    # ใส่รหัสถูกแล้วในแท็บนี้
 st.session_state.setdefault("mysig_ask", False)   # กำลังโชว์ช่องใส่รหัสอยู่
+
+# นับผู้ใช้ — ครั้งเดียวต่อแท็บ ไม่ตั้ง secret analytics_url = ไม่นับ เงียบ ๆ
+an.log_once("open")
 
 # โหมดเต็มจอมีแถวปุ่มไทม์เฟรมเพิ่มมาอีกแถว ต้องหักความสูงให้ด้วย
 _top_px = CHART_TOP_PX + (FULL_TF_ROW_PX if st.session_state.fullscreen else 0)
@@ -381,8 +385,10 @@ if c9.button(mysig_label, **FULL_BTN,
         st.session_state.mysig = False
     elif mysig_unlocked():
         st.session_state.mysig = True
+        an.log("mysignal", "on")                # เข้าโหมดได้เลย (ไม่ล็อก/ปลดแล้ว)
     else:
         st.session_state.mysig_ask = True       # ยังไม่ปลดล็อก → ขอรหัสก่อน
+        an.log("mysignal", "locked")            # กดแล้วเจอกำแพงรหัส
     st.rerun()
 
 # กล่องใส่รหัสโหมด My Signal — โผล่เฉพาะตอนกดปุ่มแล้วยังไม่ปลดล็อก
@@ -403,6 +409,7 @@ if st.session_state.mysig_ask and not mysig_unlocked():
             st.session_state.mysig_ok = True
             st.session_state.mysig = True
             st.session_state.mysig_ask = False
+            an.log("mysignal", "on")            # ปลดล็อกผ่าน = เข้าโหมดสำเร็จ
             st.rerun()
         st.error("รหัสผ่านไม่ถูกต้อง")
 

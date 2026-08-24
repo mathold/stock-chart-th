@@ -33,6 +33,9 @@ Streamlit Cloud watch branch `main` อยู่ — **แก้ในเคร�
 | `my_signal.py` | โหมด **My Signal** — BBE / DE / MCD พื้นดำ (ปุ่ม My Signal) แยกไฟล์ ไม่ยุ่งกับของเดิม |
 | `fetch_symbols.py` | สร้าง `symbols.csv` (รายชื่อแยกกลุ่ม) |
 | `symbols.csv` | `symbol,group,name` — **ต้องอยู่ใน git** ไม่งั้นดรอปดาวน์บนคลาวด์ว่าง |
+| `analytics.py` | **ตัวนับผู้ใช้** — ยิง log ไป Google Sheet ผ่าน Apps Script (ไม่ตั้ง secret = ไม่นับ) |
+| `analytics_appscript.gs` | โค้ดฝั่ง Google Sheet — เอาไปวางใน Extensions > Apps Script (ไม่ได้ใช้ตอนรัน) |
+| `ANALYTICS_SETUP.md` | คู่มือตั้งตัวนับ 5 ขั้นตอน |
 | `requirements.txt` | Streamlit Cloud ติดตั้งจากไฟล์นี้ |
 
 รันในเครื่อง (venv อยู่ที่ `.venv`, ไม่เข้า git):
@@ -158,6 +161,43 @@ mysig_password = "รหัสที่ต้องการ"
 - `mysig_unlocked()` ถูกเช็กซ้ำก่อนวาดกราฟด้วย เผื่อกรณีตั้งรหัสทีหลังตอน session เปิดค้างอยู่
 - **ข้อจำกัด** — รหัสเดียวใช้ร่วมกันทุกคน ไม่ใช่ระบบสมาชิกรายคน
   และกราฟชุดปกติยังเปิดดูได้อิสระ ล็อกเฉพาะโหมด My Signal เท่านั้น
+
+---
+
+## ตัวนับผู้ใช้ — `analytics.py`
+
+เก็บลง Google Sheet ผ่าน Google Apps Script Web App (ไม่ใช้ service account)
+วิธีติดตั้งครบทุกขั้นอยู่ที่ **`ANALYTICS_SETUP.md`**
+
+```toml
+# .streamlit/secrets.toml หรือ Settings > Secrets ของ Streamlit Cloud
+analytics_url = "https://script.google.com/macros/s/.../exec"
+analytics_key = "รหัสลับ ให้ตรงกับ SECRET_KEY ใน Apps Script"
+```
+
+เก็บ 2 เหตุการณ์:
+
+| event | detail | เกิดเมื่อ |
+|---|---|---|
+| `open` | — | เปิดเว็บ — **ครั้งเดียวต่อแท็บ** ผ่าน `an.log_once()` |
+| `mysignal` | `on` | เข้าโหมด My Signal สำเร็จ (ปลดล็อกแล้ว หรือใส่รหัสถูก) |
+| `mysignal` | `locked` | กดปุ่มแล้วเจอกำแพงรหัส (ยังไม่ปลดล็อก) |
+
+กติกาที่ต้องรักษาไว้:
+
+- **ไม่ตั้ง `analytics_url` = ไม่นับ** เงียบ ๆ แอปทำงานครบทุกอย่างเหมือนเดิม
+  (หลักเดียวกับ `mysig_password`)
+- ยิงใน **background thread** เสมอ — ชีตช้า/ล่ม ต้องไม่ทำให้กราฟค้าง
+  และห่อ `try/except` กว้าง ๆ ทุกจุด ตัวนับพังได้ แต่แอปห้ามพัง
+- Streamlit rerun ทั้งไฟล์ทุกครั้งที่กดปุ่ม → **ห้ามเรียก `an.log("open")` ตรง ๆ**
+  ที่ระดับบนสุด ยอดจะพุ่งเป็นสิบเท่าโดยไม่มีคนเข้าเพิ่ม ต้องใช้ `an.log_once()`
+- นับเป็น "แท็บ" ไม่ใช่ "คน" — ไอดีสุ่ม 12 ตัวเก็บใน `session_state` หายเมื่อรีเฟรช
+  ตัวเลขจึงเป็นค่าประมาณขาสูง
+- ไม่เก็บ IP / อีเมล / รหัสที่พิมพ์ / หุ้นที่ดู
+
+ดูตัวเลข: แท็บ **สรุป** ในชีต (อัปเดตตอนเปิดชีต หรือเมนู 📊 สถิติ)
+หรือเปิด URL `/exec` ในเบราว์เซอร์จะได้ JSON
+ของ Streamlit Cloud เองก็มี **Analytics** ในเมนู ⋮ ข้างแอป บอกยอดรวม + 20 คนล่าสุด
 
 ---
 
