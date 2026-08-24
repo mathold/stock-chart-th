@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import csv
+import hmac
 import os
 
 import pandas as pd
@@ -77,6 +78,8 @@ st.session_state.setdefault("market", None)      # None = ให้ระบบ�
 st.session_state.setdefault("fullscreen", False)  # True = โหมดไทม์เฟรมเดียวเต็มจอ
 st.session_state.setdefault("cloud", False)       # True = เปิดริบบิ้น EMA (ปุ่ม Cloud)
 st.session_state.setdefault("mysig", False)       # True = ชุด BBE/DE/MCD พื้นดำ (My Signal)
+st.session_state.setdefault("mysig_ok", False)    # ใส่รหัสถูกแล้วในแท็บนี้
+st.session_state.setdefault("mysig_ask", False)   # กำลังโชว์ช่องใส่รหัสอยู่
 
 # โหมดเต็มจอมีแถวปุ่มไทม์เฟรมเพิ่มมาอีกแถว ต้องหักความสูงให้ด้วย
 _top_px = CHART_TOP_PX + (FULL_TF_ROW_PX if st.session_state.fullscreen else 0)
@@ -105,6 +108,27 @@ st.markdown(f"""
   [data-testid="stRadio"] label {{ margin: 0 !important; padding: 0 !important; }}
 </style>
 """, unsafe_allow_html=True)
+
+
+def mysig_password() -> str:
+    """รหัสผ่านของโหมด My Signal — อ่านจาก secrets
+
+    ตั้งที่ `.streamlit/secrets.toml` (ในเครื่อง ไฟล์นี้อยู่ใน .gitignore แล้ว)
+    หรือหน้า Settings > Secrets ของ Streamlit Cloud:
+
+        mysig_password = "รหัสที่ต้องการ"
+
+    **ไม่ตั้ง = ไม่ล็อก** เพื่อให้รันในเครื่องได้โดยไม่ต้องมีไฟล์ secrets
+    ดังนั้นถ้าตั้งใจจะล็อกจริง อย่าลืมไปใส่ค่านี้บน Streamlit Cloud ด้วย
+    """
+    try:
+        return str(st.secrets.get("mysig_password", "")).strip()
+    except Exception:                                   # noqa: BLE001
+        return ""       # ไม่มีไฟล์ secrets เลย — Streamlit โยน error ตอนเรียก
+
+
+def mysig_unlocked() -> bool:
+    return (not mysig_password()) or st.session_state.mysig_ok
 
 
 def _full(fn) -> dict:
@@ -343,12 +367,44 @@ if c8.button(cloud_label, **FULL_BTN, disabled=st.session_state.mysig,
 
 # ปุ่มโหมด My Signal — ชุด BBE / DE / MCD พื้นดำ (ปิดปุ่ม Cloud ไปเลยตอนเปิด
 # เพราะโหมดนี้มีริบบิ้น BBE ของตัวเองอยู่แล้ว กดคู่กันจะงงว่าเห็นริบบิ้นอันไหน)
-mysig_label = "My Signal ✓" if st.session_state.mysig else "My Signal"
+if st.session_state.mysig:
+    mysig_label = "My Signal ✓"
+elif mysig_unlocked():
+    mysig_label = "My Signal"
+else:
+    mysig_label = "My Signal 🔒"
+
 if c9.button(mysig_label, **FULL_BTN,
              help="BBE ริบบิ้นเขียว/แดง + เลข 1-9 · DE เงินทุนเข้า-ออก · "
                   "MCD กระจายต้นทุน — เลียนแบบ Homily Chart จากข้อมูล Yahoo"):
-    st.session_state.mysig = not st.session_state.mysig
+    if st.session_state.mysig:                  # เปิดอยู่ → ปิด ไม่ต้องถามรหัส
+        st.session_state.mysig = False
+    elif mysig_unlocked():
+        st.session_state.mysig = True
+    else:
+        st.session_state.mysig_ask = True       # ยังไม่ปลดล็อก → ขอรหัสก่อน
     st.rerun()
+
+# กล่องใส่รหัสโหมด My Signal — โผล่เฉพาะตอนกดปุ่มแล้วยังไม่ปลดล็อก
+# กราฟชุดปกติยังวาดตามปกติข้างล่าง ไม่ได้บล็อกทั้งหน้า
+if st.session_state.mysig_ask and not mysig_unlocked():
+    with st.form("mysig_unlock", clear_on_submit=True):
+        f1, f2, f3 = st.columns([4, 1, 1])
+        pw = f1.text_input("รหัสผ่าน", type="password", label_visibility="collapsed",
+                           placeholder="ใส่รหัสผ่านเพื่อเปิดโหมด My Signal")
+        go = f2.form_submit_button("ปลดล็อก", **FULL_BTN)
+        no = f3.form_submit_button("ยกเลิก", **FULL_BTN)
+    if no:
+        st.session_state.mysig_ask = False
+        st.rerun()
+    if go:
+        # compare_digest กันการเดารหัสจากเวลาที่ใช้เปรียบเทียบ
+        if hmac.compare_digest(pw.strip(), mysig_password()):
+            st.session_state.mysig_ok = True
+            st.session_state.mysig = True
+            st.session_state.mysig_ask = False
+            st.rerun()
+        st.error("รหัสผ่านไม่ถูกต้อง")
 
 # แถวเลือกไทม์เฟรม — โผล่เฉพาะโหมดเต็มจอ
 full_tf = None
@@ -356,6 +412,10 @@ if st.session_state.fullscreen:
     full_tf = st.radio("ไทม์เฟรม", FULL_TFS, key="full_tf",
                        index=FULL_TFS.index("Day"), horizontal=True,
                        label_visibility="collapsed")
+
+# กันเคสที่ตั้งรหัสทีหลังตอน session ยังเปิดโหมดค้างอยู่ — ต้องเด้งกลับไปล็อก
+if st.session_state.mysig and not mysig_unlocked():
+    st.session_state.mysig = False
 
 symbol = st.session_state.symbol
 
