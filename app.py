@@ -55,7 +55,7 @@ GROUP_MARKET = {"SET50": "TH", "SET100": "TH", "mai": "TH",
 # จึงไล่ลองดัชนีจริงก่อน เผื่อวันหนึ่ง Yahoo เอากลับมา แล้วค่อยตกไป ETF
 # ตัวไหนได้ข้อมูลจริงจะโชว์ใต้กราฟในบรรทัด "สัญลักษณ์:" เสมอ ผู้ใช้จะได้รู้ว่ากำลังดูอะไร
 INDEX_TARGETS = {
-    "SET": ["^SET.BK", "SET.BK", "^SETI", "TDEX.BK", "THD"],
+    "SET": ["^SET.BK", "SET.BK", "^SETI", "^SET", "TDEX.BK", "THD"],
     "SET50": ["^SET50.BK", "SET50.BK", "^SET50", "TDEX.BK"],
 }
 
