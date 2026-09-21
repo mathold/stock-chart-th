@@ -28,6 +28,7 @@ import streamlit as st
 
 import analytics as an
 import my_signal as ms
+import usage as ug
 import thai_stock_dashboard as d
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -92,6 +93,8 @@ st.session_state.setdefault("mysig_ask", False)   # กำลังโชว์�
 
 # นับผู้ใช้ — ครั้งเดียวต่อแท็บ ไม่ตั้ง secret analytics_url = ไม่นับ เงียบ ๆ
 an.log_once("open")
+# ตัวนับชุดใหม่ (usage.py) นับ "รายเครื่อง" และนับเฉพาะตอนเปิดดูหุ้นจริง ๆ
+# จึงไม่มีอะไรตรงนี้ — ดูจุดที่เรียก ug.track() ในแถวควบคุมข้างล่าง
 
 # โหมดเต็มจอมีแถวปุ่มไทม์เฟรมเพิ่มมาอีกแถว ต้องหักความสูงให้ด้วย
 _top_px = CHART_TOP_PX + (FULL_TF_ROW_PX if st.session_state.fullscreen else 0)
@@ -352,17 +355,21 @@ if typed != st.session_state.get("_prev_typed"):
     if typed.strip():
         st.session_state.symbol = typed.strip().upper()
         st.session_state.market = None          # พิมพ์เอง = ไม่รู้ตลาด ให้ไล่หา
+        ug.track()                              # ใช้งานจริง 1 ครั้ง
 
 if choice != st.session_state.get("_prev_choice"):
     st.session_state._prev_choice = choice
     if choice not in (placeholder, "— ไม่มีรายชื่อ —"):
         st.session_state.symbol = choice
         st.session_state.market = GROUP_MARKET.get(group)
+        ug.track()
 
 if c4.button("SET", **FULL_BTN):
     st.session_state.symbol, st.session_state.market = "SET", None
+    ug.track()
 if c5.button("SET50", **FULL_BTN):
     st.session_state.symbol, st.session_state.market = "SET50", None
+    ug.track()
 if c6.button("รีเฟรช", **FULL_BTN, help="ดึงราคาใหม่ ไม่ใช้ข้อมูลที่จำไว้"):
     st.cache_data.clear()
 
@@ -433,6 +440,10 @@ if st.session_state.mysig_ask and not mysig_unlocked():
             an.log("mysignal", "on")            # ปลดล็อกผ่าน = เข้าโหมดสำเร็จ
             st.rerun()
         st.error("รหัสผ่านไม่ถูกต้อง")
+
+# ยิงตัวนับที่คิวไว้ — วางไว้ตรงนี้เพราะอยู่ใต้ปุ่มทุกปุ่มแล้ว และยังอยู่ก่อน
+# st.stop() ของกรณีหาหุ้นไม่เจอ (ถ้าไปวางท้ายไฟล์ เคสนั้นจะไม่ได้ยิง)
+ug.flush()
 
 # แถวเลือกไทม์เฟรม — โผล่เฉพาะโหมดเต็มจอ
 full_tf = None
